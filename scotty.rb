@@ -64,25 +64,27 @@ class Scotty < Thor
   desc "create","create tickets based on spreadsheets for not found (master) or found (use) tickets"
   method_option :ticket_type, :default => "master", :aliases => "-r", :desc => "sets request type to create (master or use)"
 
-  def create(ticket_type)
+  def create
 
-    case ticket_type
+    case options.ticket_type
+
       when "master"
         info "Parsing missing_master_tickets.csv and creating new master tickets"
         CSV.foreach("missing_master_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
-          args = {:name => row_data[1], :version => row_data[2], :license_text => row_data[3], :description => row_data[4],
-            :license_name => row_data[5], :source_url => row_data[6], :category => row_data[7], :modified => row_data[8]
+          @args = {:name => row_data[1], :version => row_data[2], :license_text => row_data[3], :description => row_data[4],
+            :license_name => row_data[5], :source_url => row_data[6], :category => row_data[7], :modified => row_data[8],
+            :username => @config['user'], :password => @config['password']
           }
-          result = create_tickets("master",args)
+          create_tickets("master")
         end
 
       when "use"
         info "Parsing found_master_tickets.csv and checking for use tickets in Scotzilla"
-        ###########THIS IS WRONG##########
         CSV.foreach("missing_use_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
-          args = { :product => @config['product'], :version => @config['product_version'], :mte => row_data[0].to_i}
-          result = find_tickets("use",args)
-          @checked_components.push(result)
+          @args = { :product => @config['product'], :version => @config['product_version'], :mte => row_data[0].to_i ,
+            :interaction => @config['interaction'], :description => @config['description'], :modified => "No", 
+            :features => @config['features'].join }
+          create_tickets("use")
         end
         write_to_csv("use")
       else
@@ -120,9 +122,8 @@ class Scotty < Thor
         info "Duplicates removed"
         info "Searching for existing master tickets in Scotzilla"
         @components.each do |component|
-        args = { :name => component[:name], :version => component[:version], :category => @config['category']}
-        find_tickets("master",args)
-        puts @result
+        @args = { :name => component[:name], :version => component[:version], :category => @config['category']}
+        find_tickets("master")
         @result['download_url'] = component[:download_url]
         @checked_components.push(@result)
         end
@@ -131,9 +132,9 @@ class Scotty < Thor
       when "use"
         info "Parsing found_master_tickets.csv and checking for use tickets in Scotzilla"
         CSV.foreach("found_master_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
-          args = { :product => @config['product'], :version => @config['product_version'], :mte => row_data[0].to_i}
-          result = find_tickets("use",args)
-          @checked_components.push(result)
+          @args = { :product => @config['product'], :version => @config['product_version'], :mte => row_data[0].to_i}
+          find_tickets("use")
+          @checked_components.push(@result)
         end
         write_to_csv("use")
       else
@@ -145,11 +146,11 @@ class Scotty < Thor
     puts "[INFO] " + message
   end
 
-  def create_tickets(tick_type,args)
-    @args = args
+  def create_tickets(tick_type)
     begin
       if(tick_type == "master")
         @result = @server.call("SCOTzilla.create_master", @args)
+        puts @result
       end
       if(tick_type == "use")
         @result = @server.call("SCOTzilla.create_request", @args)
@@ -163,8 +164,7 @@ class Scotty < Thor
     end
   end
 
-  def find_tickets(tick_type,args)
-    @args = args
+  def find_tickets(tick_type)
     begin
       if(tick_type == "master")
         @result = @server.call("SCOTzilla.find_master", @args)
@@ -185,46 +185,48 @@ class Scotty < Thor
 
     if(ticket_type == "master")
       CSV.open("found_master_tickets.csv", "wb") do |csv|
-        csv << ["id","name","version","license_text","description","license_name","source_url","category","modified"] 
+        csv << ["id","name","version","license_text","description","license_name","source_url","category","is_modified"] 
         counter = 0
         @checked_components.each {|elem| 
-          counter =  counter + 1
             if(elem['stat'] == "ok")
+               counter =  counter + 1
                #Clean up [Master Ticket] rest-client - 1.6.7 to be three seperate columns
                elem['desc'].slice! "[Master Ticket] "
                tmp = elem['desc'].split
                tmp.delete_at(1)
                # Shove stuff in a CSV
                csv << [elem['id'],tmp[0],tmp[1],@config['license_text'],"",
-                 @config['license_name'],elem['download_url'],@config['category'],@config['modified']] 
+                 @config['license_name'],elem['download_url'],@config['category'],"No"] 
             end
           }
       info "Wrote " + counter.to_s + " records to found_master_tickets.csv"
       end
       counter = 0
       CSV.open("missing_master_tickets.csv", "wb") do |csv|
-        csv << ["id","name","version","license_text","description","license_name","source_url","category","modified"]
+        csv << ["id","name","version","license_text","description","license_name","source_url","category","is_modified"]
         @checked_components.each {|elem| 
           if(elem['stat'] == "err")
             counter = counter + 1
-            csv << ["",elem['data'][0], elem['data'][1],@config['license_text'],"",@config['license_name'],elem['download_url'],elem['data'][2],@config['modified']]
+            csv << ["",elem['data'][0], elem['data'][1],@config['license_text'],"",@config['license_name'],
+            elem['download_url'],elem['data'][2],"No"]
           end
         }
       end
       info "Wrote " + counter.to_s + " records to missing_master_tickets.csv"
-      info "Check the spreadsheet, modify it, and run 'scotty scan -tt use' to see how many use tickets are available"
+      info "Check the spreadsheet, modify it, and run 'scotty scan -r use' to see how many use tickets are available"
     
     elsif(ticket_type == "use")
       counter = 0
       CSV.open("found_use_tickets.csv", "wb") do |csv|
-        csv << ["mte","product","version","id","interaction","description","modified","features"]
+        csv << ["mte","product","version","id","interaction","description","is_modified","features"]
         counter = 0
         @checked_components.each {|elem| 
-          counter =  counter + 1
             if(elem['stat'] == "ok")
+              counter =  counter + 1
                csv << [elem['mte'],elem['product'],elem['version'],"","","","",""]
                  elem['requests'].each {|item|
-                   csv << ["","","",item['id'], item['interactions'].join,@config['description'],item['modified'],item['features'].join] 
+                   csv << ["","","",item['id'], item['interactions'].join,@config['description'],
+                   item['is_modified'],item['features'].join] 
                  }
               
             end
@@ -234,16 +236,16 @@ class Scotty < Thor
 
       counter = 0
       CSV.open("missing_use_tickets.csv", "wb") do |csv|
-        csv << ["mte","product","version","id","interaction","description","modified","features"]
+        csv << ["mte","product","version","id","interaction","description","is_modified","features"]
         counter = 0
         @checked_components.each {|elem| 
-          counter =  counter + 1
             if(elem['stat'] == "err")
+               counter =  counter + 1
                csv << [elem['data'][2], elem['data'][0],elem['data'][1]]
             end
           }
       end
-      info "Wrote " + counter.to_s + " records to found_use_tickets.csv"
+      info "Wrote " + counter.to_s + " records to missing_use_tickets.csv"
     end
   end
 
@@ -294,8 +296,9 @@ class Scotty < Thor
     to_be_pushed = Hash.new
     dependencies_to_be_pushed = Hash.new
     dev_dependencies_to_be_pushed = Hash.new
+    to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + result['name']
     to_be_pushed[:name] = result['name']
-    to_be_pushed[:version] = result['version']
+    to_be_pushed[:version] = result['version'].gsub("x", "0") #some of these versions are 1.0.x
     @components.push(to_be_pushed)
 
     #package.json has dependency and devDependency hashes
@@ -303,7 +306,7 @@ class Scotty < Thor
       result['dependencies'].each_pair do |k,v|
         dependencies_to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + k
         dependencies_to_be_pushed[:name] = k
-        dependencies_to_be_pushed[:version] = v
+        dependencies_to_be_pushed[:version] = v.gsub("x","0") #some of these versions are 1.0.x
         @components.push(dependencies_to_be_pushed)
       end
     end
@@ -312,7 +315,7 @@ class Scotty < Thor
       result['devDependencies'].each_pair do |k,v|
         dev_dependencies_to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + k
         dev_dependencies_to_be_pushed[:name] = k
-        dev_dependencies_to_be_pushed[:version] = v
+        dev_dependencies_to_be_pushed[:version] = v.gsub("x","0") #some of these versions are 1.0.x
         @components.push(dev_dependencies_to_be_pushed)
       end
     end
