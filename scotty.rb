@@ -344,9 +344,9 @@ class Scotty < Thor
     top_level_pom.each {|top|
       info "Running mvn install for " + top
       top_minus = top.chomp("pom.xml")
-      system("cd " + top_minus + ";mvn dependency:list | tee delete_me.txt")
+      system("cd " + top_minus + ";mvn install;mvn dependency:list | tee delete_me.txt")
       info "Parsing dependency list..."
-      f = File.open(top_minus+"output.txt")
+      f = File.open(top_minus+"delete_me.txt")
       results = f.readlines
       f.close
       results.each do |n|
