@@ -19,7 +19,7 @@ class Scotty < Thor
     @result = {}
     @components = {}
     @checked_components = {}
-    @error_on_file = ""
+    @directory = "software"
    
     # Initialize opens a yaml file from ~/.scotty and loads it into the :config hash
     # If no ~/.scotty exists, it will create one. Sorry to clutter up your home directory
@@ -29,30 +29,14 @@ class Scotty < Thor
     my_init
   end
 
-  desc "scan","scan a file for either GPL or for existing tickets in Scotzilla"
-  method_option :gpl, :default => "false", :aliases => "-gpl", :desc => "scans for recognizable GPL verbiage"
-  method_option :type, :default => "ruby", :aliases => "-t", :desc => "ruby (default), maven, or node"
-  method_option :directory, :default => "software", :aliases => "-d", :desc => "top directory of software to scan"
+  desc "scan","scan for existing tickets in Scotzilla"
   method_option :ticket_type, :default => "master", :aliases => "-r", :desc => "sets request type to search for (master or use)"
 
   def scan
-
-    if options.ticket_type == "master"
-      unless(File::directory?( options.directory ))
+    # master tickets require that software be in a directory to scan
+    if(options.ticket_type == "master")
+      unless(File::directory?( "software"))
         error(5)
-      end
-      if options.gpl.downcase == "true"
-        parse_gpl
-      end
-      case options.type.downcase
-        when "ruby"
-          info "Scanning directory " + options.directory + " for a Gemfile.lock"
-        when "maven"
-          info "Scanning directory " + options.directory + " for a pom.xml"
-        when "node"
-          info "Scanning directory " + options.directory + " for a package.json"
-        else
-          error(4)
       end
     end
     
@@ -122,13 +106,14 @@ class Scotty < Thor
         info "Duplicates removed"
         info "Searching for existing master tickets in Scotzilla"
         @components.each do |component|
+        puts component[:name]
         @args = { :name => component[:name], :version => component[:version], :category => @config['category']}
         find_tickets("master")
         @result['download_url'] = component[:download_url]
+        @result['dir'] = component[:subdir]
         @checked_components.push(@result)
         end
         write_to_csv("master")
-
       when "use"
         info "Parsing found_master_tickets.csv and checking for use tickets in Scotzilla"
         CSV.foreach("found_master_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
@@ -159,12 +144,14 @@ class Scotty < Thor
       if e =~ /SocketError/
         error(2)
       else
+        puts e
         error(0)
       end
     end
   end
 
   def find_tickets(tick_type)
+    puts @args
     begin
       if(tick_type == "master")
         @result = @server.call("SCOTzilla.find_master", @args)
@@ -176,6 +163,8 @@ class Scotty < Thor
       if e =~ /SocketError/
         error(2)
       else
+        puts @result
+        puts e
         error(0)
       end
     end
@@ -185,7 +174,7 @@ class Scotty < Thor
 
     if(ticket_type == "master")
       CSV.open("found_master_tickets.csv", "wb") do |csv|
-        csv << ["id","name","version","license_text","description","license_name","source_url","category","is_modified"] 
+        csv << ["id","name","version","license_text","description","license_name","source_url","category","is_modified","dir"] 
         counter = 0
         @checked_components.each {|elem| 
             if(elem['stat'] == "ok")
@@ -196,19 +185,19 @@ class Scotty < Thor
                tmp.delete_at(1)
                # Shove stuff in a CSV
                csv << [elem['id'],tmp[0],tmp[1],@config['license_text'],"",
-                 @config['license_name'],elem['download_url'],@config['category'],"No"] 
+                 @config['license_name'],elem['download_url'],@config['category'],"No",elem['subdir']] 
             end
           }
       info "Wrote " + counter.to_s + " records to found_master_tickets.csv"
       end
       counter = 0
       CSV.open("missing_master_tickets.csv", "wb") do |csv|
-        csv << ["id","name","version","license_text","description","license_name","source_url","category","is_modified"]
+        csv << ["id","name","version","license_text","description","license_name","source_url","category","is_modified","dir"]
         @checked_components.each {|elem| 
           if(elem['stat'] == "err")
             counter = counter + 1
             csv << ["",elem['data'][0], elem['data'][1],@config['license_text'],"",@config['license_name'],
-            elem['download_url'],elem['data'][2],"No"]
+            elem['download_url'],elem['data'][2],"No",elem['subdir']]
           end
         }
       end
@@ -251,8 +240,8 @@ class Scotty < Thor
 
   def traverse
     found_components = false
-    if(options.type == "ruby" || options.type == "node" || options.gpl == "true")
-      Find.find(options.directory) do |path|
+    # First let's look for some ruby and node
+      Find.find("software") do |path|
         if FileTest.directory?(path)
           if File.basename(path)[0] == ?.
             Find.prune       # Don't look any further into this directory.
@@ -260,50 +249,50 @@ class Scotty < Thor
             next
           end
         else
-          if options.gpl == true 
-            File.each_line(File.basename(path)) do |li|
-              if (li[/GENERAL PUBLIC LICENSE/i])
-              @error_on_file = File.basename(path)
-              error(6)
-              end
-            end
-          elsif File.basename(path) == "Gemfile.lock" &&  options.type == "ruby"
+          if File.basename(path) == "Gemfile.lock"
             found_components = true
             parse_gemfile_lock(File.expand_path(path))
-          elsif File.basename(path) == "package.json" && options.type = "node"
+          elsif File.basename(path) == "package.json"
             found_components = true
             parse_node_packages(File.expand_path(path))
           end
         end
       end
-    elsif options.directory = "maven"
-      top_level_pom = Dir[options.directory + '/*/pom.xml']
+
+      #now let's look for some maven
+      top_level_pom = Dir["software" + '/*/pom.xml']
       unless(top_level_pom.nil?)
         found_components = true
         parse_maven_packages(top_level_pom)
-      end  
-    else
-      self.error(4)
-    end 
+      end   
     if(found_components == false)
       error(1)
     end
   end
 
   def parse_node_packages(file_path)
+     info "Parsing " + file_path
+    subdir = file_path.scan(/\/software\/\w*/)
     json = File.read(file_path)
+    begin
     result = JSON.parse(json)
+    rescue
+      return
+    end
     to_be_pushed = Hash.new
     dependencies_to_be_pushed = Hash.new
     dev_dependencies_to_be_pushed = Hash.new
+    to_be_pushed[:dir] = subdir
     to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + result['name']
     to_be_pushed[:name] = result['name']
-    to_be_pushed[:version] = result['version'].gsub("x", "0") #some of these versions are 1.0.x
+    to_be_pushed[:version] = result['version'].gsub("x", "0").gsub(">=","") #some of these versions are 1.0.x
     @components.push(to_be_pushed)
-
     #package.json has dependency and devDependency hashes
-    unless(result['dependencies'].nil?)
-      result['dependencies'].each_pair do |k,v|
+    unless(result['dependencies'].to_s == "")
+      result['dependencies'].each do |k,v|
+        puts k
+        puts v
+        dependencies_to_be_pushed[:dir] = subdir
         dependencies_to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + k
         dependencies_to_be_pushed[:name] = k
         dependencies_to_be_pushed[:version] = v.gsub("x","0") #some of these versions are 1.0.x
@@ -313,6 +302,7 @@ class Scotty < Thor
 
     unless(result['devDependencies'].nil?)
       result['devDependencies'].each_pair do |k,v|
+        dev_dependencies_to_be_pushed[:dir] = subdir
         dev_dependencies_to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + k
         dev_dependencies_to_be_pushed[:name] = k
         dev_dependencies_to_be_pushed[:version] = v.gsub("x","0") #some of these versions are 1.0.x
@@ -324,6 +314,8 @@ class Scotty < Thor
 
   def parse_gemfile_lock(file_path)
     info "Parsing " + file_path
+    subdir = file_path.scan(/\/software\/\w*/)
+    puts subdir
     f = File.open(file_path)
     results = f.readlines
     f.close
@@ -331,6 +323,7 @@ class Scotty < Thor
       if(n =~ /\((?:(\d+)\.)?(?:(\d+)\.)?(\*|\d+)\)/)
         raw_materials = n.split("(")
         to_be_pushed = Hash.new
+        to_be_pushed[:dir] = subdir
         to_be_pushed[:name] = raw_materials[0].strip!
         to_be_pushed[:download_url] = "http://rubygems.org/gems/" + to_be_pushed[:name]
         t = (raw_materials[1].strip!)
@@ -341,10 +334,11 @@ class Scotty < Thor
   end
 
   def parse_maven_packages(top_level_pom)
+    subdir = top_level_pom.to_s.scan(/\/software\/\w*/)
     top_level_pom.each {|top|
       info "Running mvn install for " + top
       top_minus = top.chomp("pom.xml")
-      system("cd " + top_minus + ";mvn install;mvn dependency:list | tee delete_me.txt")
+      system("cd " + top_minus + ";mvn install ;mvn dependency:list | tee delete_me.txt")
       info "Parsing dependency list..."
       f = File.open(top_minus+"delete_me.txt")
       results = f.readlines
@@ -352,9 +346,17 @@ class Scotty < Thor
       results.each do |n|
         if(n =~ /:(.*):.*:(.*):/)
           raw_materials = n.split(":")
+          raw_materials[0] = raw_materials[0].gsub(/\[INFO\]/,"")
+          raw_materials[0] = raw_materials[0].strip
+          raw_materials[1] = raw_materials[1].strip
+          raw_materials[3] = raw_materials[3].strip
+          if (raw_materials[3].size == 1)
+            raw_materials[3] = raw_materials[3] + ".0.0"
+          end
           to_be_pushed = Hash.new
-          to_be_pushed[:download_url] = "http://search.maven.org/#search|ga|1|g:" + raw_materials[0].strip!
-          to_be_pushed[:name] = raw_materials[1].strip!
+          to_be_pushed[:dir] = subdir
+          to_be_pushed[:download_url] = "http://search.maven.org/#search|ga|1|g:" + raw_materials[0]
+          to_be_pushed[:name] = raw_materials[1]
           to_be_pushed[:version] = raw_materials[3]
           @components.push(to_be_pushed)
         end
@@ -376,13 +378,8 @@ class Scotty < Thor
       when 3
          puts "[ERROR] A scotty config file could not be found"
          puts "[INFO]  A config file was written to ~/.scotty"
-      when 4
-         puts "[ERROR] Scotty can only parse Ruby, Maven, or Node"
       when 5
          puts "[ERROR] Cannot find " + options.directory
-      when 6
-         puts "[ERROR] We found a GPL licsense here " + @error_on_file
-         puts "[ERROR] Make sure you clear this with legal before filing tickets"
       when 7
          puts "[ERROR] Invalid ticket_type - values can be either 'master' or 'use'" 
      end
