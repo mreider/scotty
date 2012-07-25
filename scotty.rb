@@ -110,7 +110,7 @@ class Scotty < Thor
         @args = { :name => component[:name], :version => component[:version], :category => @config['category']}
         find_tickets("master")
         @result['download_url'] = component[:download_url]
-        @result['dir'] = component[:subdir]
+        @result['subdir'] = component[:subdir]
         @checked_components.push(@result)
         end
         write_to_csv("master")
@@ -282,30 +282,30 @@ class Scotty < Thor
     to_be_pushed = Hash.new
     dependencies_to_be_pushed = Hash.new
     dev_dependencies_to_be_pushed = Hash.new
-    to_be_pushed[:dir] = subdir
-    to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + result['name']
-    to_be_pushed[:name] = result['name']
-    to_be_pushed[:version] = result['version'].gsub("x", "0").gsub(">=","") #some of these versions are 1.0.x
-    @components.push(to_be_pushed)
+    unless(result['name'].nil?)
+      to_be_pushed[:subdir] = subdir
+      to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + result['name']
+      to_be_pushed[:name] = result['name']
+      to_be_pushed[:version] = result['version'].gsub("x", "0").gsub(">=","").gsub("*","1.0.0") #some of these versions are 1.0.x
+      @components.push(to_be_pushed)
+    end
     #package.json has dependency and devDependency hashes
-    unless(result['dependencies'].to_s == "")
+    unless(result['dependencies'].nil?) 
       result['dependencies'].each do |k,v|
-        puts k
-        puts v
-        dependencies_to_be_pushed[:dir] = subdir
+        dependencies_to_be_pushed[:subdir] = subdir
         dependencies_to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + k
         dependencies_to_be_pushed[:name] = k
-        dependencies_to_be_pushed[:version] = v.gsub("x","0") #some of these versions are 1.0.x
+        dependencies_to_be_pushed[:version] = v.gsub("x", "0").gsub(">=","").gsub("*","1.0.0") #some of these versions are 1.0.x
         @components.push(dependencies_to_be_pushed)
       end
     end
 
     unless(result['devDependencies'].nil?)
-      result['devDependencies'].each_pair do |k,v|
-        dev_dependencies_to_be_pushed[:dir] = subdir
+      result['devDependencies'].each do |k,v|
+        dev_dependencies_to_be_pushed[:subdir] = subdir
         dev_dependencies_to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + k
         dev_dependencies_to_be_pushed[:name] = k
-        dev_dependencies_to_be_pushed[:version] = v.gsub("x","0") #some of these versions are 1.0.x
+        dev_dependencies_to_be_pushed[:version] = v.gsub("x", "0").gsub(">=","").gsub("*","1.0.0") #some of these versions are 1.0.x
         @components.push(dev_dependencies_to_be_pushed)
       end
     end
@@ -315,7 +315,6 @@ class Scotty < Thor
   def parse_gemfile_lock(file_path)
     info "Parsing " + file_path
     subdir = file_path.scan(/\/software\/\w*/)
-    puts subdir
     f = File.open(file_path)
     results = f.readlines
     f.close
@@ -323,7 +322,7 @@ class Scotty < Thor
       if(n =~ /\((?:(\d+)\.)?(?:(\d+)\.)?(\*|\d+)\)/)
         raw_materials = n.split("(")
         to_be_pushed = Hash.new
-        to_be_pushed[:dir] = subdir
+        to_be_pushed[:subdir] = subdir
         to_be_pushed[:name] = raw_materials[0].strip!
         to_be_pushed[:download_url] = "http://rubygems.org/gems/" + to_be_pushed[:name]
         t = (raw_materials[1].strip!)
@@ -354,7 +353,7 @@ class Scotty < Thor
             raw_materials[3] = raw_materials[3] + ".0.0"
           end
           to_be_pushed = Hash.new
-          to_be_pushed[:dir] = subdir
+          to_be_pushed[:subdir] = subdir
           to_be_pushed[:download_url] = "http://search.maven.org/#search|ga|1|g:" + raw_materials[0]
           to_be_pushed[:name] = raw_materials[1]
           to_be_pushed[:version] = raw_materials[3]
