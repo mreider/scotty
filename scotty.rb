@@ -110,14 +110,23 @@ class Scotty < Thor
         @args = { :name => component[:name], :version => component[:version], :category => @config['category']}
         find_tickets("master")
         @result['download_url'] = component[:download_url]
-        @result['subdir'] = component[:subdir]
+        begin
+          if component[:subdir].to_s =~ /"/
+            tmp_str = "cf-" + component[:subdir].to_s.match('software\/(.*)"')[1]
+          else
+            tmp_str = "cf-" + component[:subdir].to_s.match('software\/(.*)\/')[1]
+          end
+        rescue
+          tmp_str = component[:subdir]
+        end
+        @result['subdir'] = tmp_str
         @checked_components.push(@result)
         end
         write_to_csv("master")
       when "use"
         info "Parsing found_master_tickets.csv and checking for use tickets in Scotzilla"
         CSV.foreach("found_master_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
-          @args = { :product => @config['product'], :version => @config['product_version'], :mte => row_data[0].to_i}
+          @args = { :product => row_data[9], :version => @config['product_version'], :mte => row_data[0].to_i}
           find_tickets("use")
           @checked_components.push(@result)
         end
@@ -134,7 +143,12 @@ class Scotty < Thor
   def create_tickets(tick_type)
     begin
       if(tick_type == "master")
+        @result = ""
+        begin
         @result = @server.call("SCOTzilla.create_master", @args)
+        rescue
+        info "fail!!!" + @args.to_s
+        end
         puts @result
       end
       if(tick_type == "use")
@@ -174,7 +188,7 @@ class Scotty < Thor
 
     if(ticket_type == "master")
       CSV.open("found_master_tickets.csv", "wb") do |csv|
-        csv << ["id","name","version","license_text","description","license_name","source_url","category","is_modified","dir"] 
+        csv << ["id","name","version","license_text","description","license_name","source_url","category","is_modified","repo"] 
         counter = 0
         @checked_components.each {|elem| 
             if(elem['stat'] == "ok")
@@ -192,7 +206,7 @@ class Scotty < Thor
       end
       counter = 0
       CSV.open("missing_master_tickets.csv", "wb") do |csv|
-        csv << ["id","name","version","license_text","description","license_name","source_url","category","is_modified","dir"]
+        csv << ["id","name","version","license_text","description","license_name","source_url","category","is_modified","repo"]
         @checked_components.each {|elem| 
           if(elem['stat'] == "err")
             counter = counter + 1
@@ -333,7 +347,6 @@ class Scotty < Thor
   end
 
   def parse_maven_packages(top_level_pom)
-    subdir = top_level_pom.to_s.scan(/\/software\/\w*/)
     top_level_pom.each {|top|
       info "Running mvn install for " + top
       top_minus = top.chomp("pom.xml")
@@ -353,7 +366,7 @@ class Scotty < Thor
             raw_materials[3] = raw_materials[3] + ".0.0"
           end
           to_be_pushed = Hash.new
-          to_be_pushed[:subdir] = subdir
+          to_be_pushed[:subdir] = top_minus
           to_be_pushed[:download_url] = "http://search.maven.org/#search|ga|1|g:" + raw_materials[0]
           to_be_pushed[:name] = raw_materials[1]
           to_be_pushed[:version] = raw_materials[3]
@@ -389,4 +402,3 @@ class Scotty < Thor
 end
 
 Scotty.start
-
