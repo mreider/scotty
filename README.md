@@ -39,7 +39,17 @@ Author: Matthew Reider at VMware
 		ruby scotty.rb [arguments]
 		
 6. If you don't have a .scotty file in your home directory, Scotty will create one
+
 7. Edit your ~/.scotty file with your VMware username and password
+
+8. Also change the product_version in ~/.scotty to the next release version. As of Q3 2012 we are using dates for versions. The first was 09/01/2012. It's a good idea to date the version about three weeks in the future from when you file tickets as this is likely when legal will catch up and issue license files.
+
+9. Make sure you have a subdirectory named 'software' under the directory where scotty.rb exists.
+
+1. Download / clone all of the Cloud Foundry bits to this directory with
+
+		curl -s "https://api.github.com/orgs/cloudfoundry/repos?per_page=100" | ruby -rjson -e 'JSON.load(STDIN.read).each {|repo| %x[git clone #{repo["ssh_url"]} ]}'
+		
 
 Scotty parses Ruby, Node, and Maven (Java) apps using the following files to get component and version lists:
 
@@ -47,62 +57,80 @@ Scotty parses Ruby, Node, and Maven (Java) apps using the following files to get
 - package.json
 - pom.xml
 
-# Scanning your software repository
+Scotty also assumes that all of the directories (Github repositories) in /software map to a product name in Scotzilla. The current list of these repository / product names are:
 
-1. Make sure you have a directory named 'software' in your current directory or use the -d option.
-1. Download / clone all of the Cloud Foundry bits to this directory with
+- ACM
+- BOSH
+- BOSH Release
+- BOSH Sample Release
+- Caldecott
+- CF
+- CF Docs
+- CF Plugin
+- CF-Release
+- Cloud Controller
+- Cloud Controller NG
+- Common
+- DEA
+- Gonats
+- Gonit
+- Gosigar
+- Health Manager
+- Membrane
+- Micro
+- Micro Deployments
+- OSS Bits
+- OSS Tools
+- Package Cache
+- Router
+- Stager
+- UAA
+- vBlob
+- VCAP
+- VCAP Java
+- VCAP Concurrency
+- VCAP Java Client
+- VCAP Node
+- VCAP Services Base
+- VCAP Staging
+- VCAP Test Assets
+- VCAP Tools
+- VCAP Yeti
+- VMC
+- VMC Giue
+- VMC Lib
+- Warden
 
-		curl -s "https://api.github.com/orgs/cloudfoundry/repos?per_page=100" | ruby -rjson -e 'JSON.load(STDIN.read).each {|repo| %x[git clone #{repo["ssh_url"]} ]}'
+Note: Please update this list if you add a new product to Scotzilla.
+
+# Creating Scotzilla tickets for Cloud Foundry
 
 1. Scan the repository
 
 		ruby scotty.rb scan
 		
 1. After scanning for master tickets generates: `found_master_tickets.csv` and `missing_master_tickets.csv`
-1. After scanning for use tickets (based on master sheets) generates: `found_use_tickets.csv` and `missing_use_tickets.csv`
 
-## Options
+1. Review `missing_master_tickets.csv` file and look for malformed rows / records.
 
-### gpl
-To Check the repository for GPL license and quits with the GPL license location printed to stdout
+1. If `missing_master_tickets.csv` is well formed, go ahead and file tickets using:
 
-	ruby scotty.rb scan -gpl
+		ruby scotty.rb create
 
-### Type
-Set the type of a search with '-t' (currently supports 'node', 'maven', or 'ruby')
+1. Scan your repository again. `missing_master_tickets.csv` should be empty now. If it isn't file an issue here on Github, as there is a bug.
 
-	ruby scotty.rb scan -t maven
+1. Now that you have created all of your master tickets, it's time to scan for Use Tickets.
 
-### Target Directory
-Set the directory to scan with '-d'
+		ruby scotty.rb -r use
 
-	ruby scotty.rb scan -d ~/software/myapp
+1. After scanning for use tickets the following will be generated: `found_use_tickets.csv` and `missing_use_tickets.csv`
 
-### Request Type
-Set the request type to scan using -r (currently supports 'master' or 'use')
+1. Review `missing_use_tickets.csv` and look for malformed rows / records.
 
-	ruby scotty.rb scan -r master
-
-# The Entire flow of Creating new tickets
-
-1. Make sure you have run scans for both master and use tickets
-1. Open the `missing_master_tickets.csv` file and check it so that tickets can be created accurately.
-1. Create Master tickets
-
-		ruby scotty.rb create -r master
-		
-1. After creating master tickets, a new scan will be run, and new spreadsheets will be generated
-1. Make sure that `missing_master_tickets.csv` is empty. If not - there's a bug! (report it)
-1. Scan for use tickets
-
-		ruby scotty.rb scan -r use
-
-1. The file `missing_use_tickets.csv` will be created (as well as `found_use_tickets`, but this is informational / not parsed by scotty)
-1. Create Use tickets (this parses `missing_use_tickets.csv` and creates new ones based on the interaction and features set in ~/.scotty)
+1. If `missing_use_tickets.csv` is well formed, go ahead and file use tickets using:
 
 		ruby scotty.rb create -r use
 		
-1. After creating use tickets, a new scan will be run, and new `missing_use_tickets.csv` will be created
-1. Make sure that `missing_use_tickets.csv` is empty. If not - there's a bug! (report it)
+1. Scan for use tickets again. `missing_use_tickets.csv` should be empty now. If it isn't - file an issue here on Github, as there is a bug.
 
-Thanks for using Scotty.
+Thanks for using Scotty!
