@@ -63,11 +63,11 @@ class Scotty < Thor
         end
 
       when "use"
-        info "Parsing found_master_tickets.csv and checking for use tickets in Scotzilla"
+        info "Parsing missing_use_tickets.csv and creating new tickets"
         CSV.foreach("missing_use_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
-          @args = { :product => @config['product'], :version => @config['product_version'], :mte => row_data[0].to_i ,
-            :interaction => @config['interaction'], :description => @config['description'], :modified => "No", 
-            :features => @config['features'].join }
+          @args = { :product => row_data[1], :version => @config['product_version'], :mte => row_data[0].to_i ,
+            :interaction => @config['interaction'], :description => @config['description'], :username => @config['user'],
+            :password => @config['password'] }
           create_tickets("use")
         end
         write_to_csv("use")
@@ -153,6 +153,7 @@ class Scotty < Thor
       end
       if(tick_type == "use")
         @result = @server.call("SCOTzilla.create_request", @args)
+        puts @result
       end
     rescue => e
       if e =~ /SocketError/
