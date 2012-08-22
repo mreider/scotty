@@ -50,7 +50,8 @@ Scotty parses Ruby, Node, and Maven (Java) apps using the following files to get
 # Scanning your software repository
 
 1. Make sure you have a directory named 'software' in your current directory or use the -d option.
-1. Download / clone a software repository to the 'software' directory
+1. Download / clone all of the Cloud Foundry bits to this directory with
+  curl -s "https://api.github.com/orgs/cloudfoundry/repos?per_page=100" | ruby -rjson -e 'JSON.load(STDIN.read).each {|repo| %x[git clone #{repo["ssh_url"]} ]}'
 1. Scan the repository
 
 		ruby scotty.rb scan
