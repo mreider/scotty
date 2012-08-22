@@ -103,6 +103,8 @@ Scotty also assumes that all of the directories (Github repositories) in /softwa
 
 Note: Please update this list if you add a new product to Scotzilla.
 
+Double Note: The name of these products in Scotzilla is alwyas preceded by a 'cf' - (for instance cf-Micro, or cf-CF-Release)
+
 # Creating Scotzilla tickets for Cloud Foundry
 
 1. Scan the repository
