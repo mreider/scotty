@@ -107,6 +107,8 @@ Double Note: The name of these products in Scotzilla is alwyas preceded by a 'cf
 
 # Creating Scotzilla tickets for Cloud Foundry
 
+1. Open your ~/.scotty file and make sure the product_version is correct. You should file bugzilla tickets for new versions for each of the repos before continuing.
+
 1. Scan the repository
 
 		ruby scotty.rb scan
