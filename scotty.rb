@@ -107,7 +107,7 @@ class Scotty < Thor
         info "Searching for existing master tickets in Scotzilla"
         @components.each do |component|
         puts component[:name]
-        @args = { :name => component[:name], :version => component[:version], :category => @config['category']}
+        @args = { :name => component[:name].downcase, :version => component[:version].downcase, :category => @config['category']}
         find_tickets("master")
         @result['download_url'] = component[:download_url]
         begin
@@ -199,7 +199,7 @@ class Scotty < Thor
                tmp = elem['desc'].split
                tmp.delete_at(1)
                # Shove stuff in a CSV
-               csv << [elem['id'],tmp[0],tmp[1],@config['license_text'],"",
+               csv << [elem['id'],tmp[0].downcase,tmp[1].downcase,@config['license_text'],"",
                  @config['license_name'],elem['download_url'],@config['category'],"No",elem['subdir']] 
             end
           }
@@ -211,7 +211,7 @@ class Scotty < Thor
         @checked_components.each {|elem| 
           if(elem['stat'] == "err")
             counter = counter + 1
-            csv << ["",elem['data'][0], elem['data'][1],@config['license_text'],"",@config['license_name'],
+            csv << ["",elem['data'][0].downcase, elem['data'][1].downcase,@config['license_text'],"",@config['license_name'],
             elem['download_url'],elem['data'][2],"No",elem['subdir']]
           end
         }
