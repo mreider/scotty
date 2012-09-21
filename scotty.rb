@@ -211,8 +211,10 @@ class Scotty < Thor
         @checked_components.each {|elem| 
           if(elem['stat'] == "err")
             counter = counter + 1
-            csv << ["",elem['data'][0].downcase, elem['data'][1].downcase,@config['license_text'],"",@config['license_name'],
-            elem['download_url'],elem['data'][2],"No",elem['subdir']]
+            version = elem['data'][1]
+            version.downcase unless not version.respond_to? :downcase
+            csv << ["", elem['data'][0].downcase, version, @config['license_text'], "", @config['license_name'],
+                    elem['download_url'], elem['data'][2], "No", elem['subdir']]
           end
         }
       end
