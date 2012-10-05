@@ -102,7 +102,7 @@ class Scotty < Thor
     case ticket_type
       when "master"
         traverse
-        @components.uniq!
+        @components.uniq! { |e| e[:name].downcase + e[:version].to_str.downcase }
         info "Duplicates removed"
         info "Searching for existing master tickets in Scotzilla"
         @components.each do |component|
@@ -296,10 +296,8 @@ class Scotty < Thor
     rescue
       return
     end
-    to_be_pushed = Hash.new
-    dependencies_to_be_pushed = Hash.new
-    dev_dependencies_to_be_pushed = Hash.new
     unless(result['name'].nil?)
+      to_be_pushed = Hash.new
       to_be_pushed[:subdir] = subdir
       to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + result['name']
       to_be_pushed[:name] = result['name']
@@ -309,6 +307,7 @@ class Scotty < Thor
     #package.json has dependency and devDependency hashes
     unless(result['dependencies'].nil?) 
       result['dependencies'].each do |k,v|
+        dependencies_to_be_pushed = Hash.new
         dependencies_to_be_pushed[:subdir] = subdir
         dependencies_to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + k
         dependencies_to_be_pushed[:name] = k
@@ -319,6 +318,7 @@ class Scotty < Thor
 
     unless(result['devDependencies'].nil?)
       result['devDependencies'].each do |k,v|
+        dev_dependencies_to_be_pushed = Hash.new
         dev_dependencies_to_be_pushed[:subdir] = subdir
         dev_dependencies_to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + k
         dev_dependencies_to_be_pushed[:name] = k
