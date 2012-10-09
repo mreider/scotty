@@ -11,10 +11,10 @@ require 'csv'
 require 'json'
 require 'open3'
 require 'thor'
+require './sz_api'
 
 class Scotty < Thor
 
-    @server = {}
     @config = {}
     @components = {}
     @checked_components = {}
@@ -96,9 +96,8 @@ class Scotty < Thor
         error(3)
       end
     @config = YAML::load(@yaml)
-    @server = XMLRPC::Client.new3({'host' => @config['host'], 'path' => "/" + @config['path'], 'port' => @config['port'], 'use_ssl' => @config['use_ssl']})
-    @server.user = @config['user']
-    @server.password = @config['password']
+    @scotzilla = SZ_API.new(@config['host'], "/" + @config['path'], @config['port'],
+                            @config['use_ssl'], @config['user'], @config['password'])
   end
 
   def parse_gpl
@@ -149,49 +148,28 @@ class Scotty < Thor
     puts "[INFO] " + message
   end
 
-  def create_tickets(tick_type, args)
-    begin
-      result = nil
-      if(tick_type == "master")
-				result = @server.call("SCOTzilla.create_master", args)
-			end
-      if(tick_type == "use")
-        result = @server.call("SCOTzilla.create_request", args)
-      end
-      puts result
-      return result
-      
-    rescue => e
-      if e =~ /SocketError/
-        error(2)
-      else
-        puts e
-        error(0)
-      end
+  def create_tickets(tick_type, args)  	
+    result = nil
+    if(tick_type == "master")
+      result = @scotzilla.create_master_ticket(args)
+  	end
+    if(tick_type == "use")
+      result = @scotzilla.create_use_ticket(args)
     end
+    puts result
+    return result
   end
 
   def find_tickets(tick_type, args)
-    begin
-    	result = ""
-      if(tick_type == "master")
-        result = @server.call("SCOTzilla.find_master", args)
-      end
-      if(tick_type == "use")
-        result = @server.call("SCOTzilla.find_requests", args)
-      end
-      puts result
-      return result
-      
-    rescue => e
-      if e =~ /SocketError/
-        error(2)
-      else
-        puts result
-        puts e
-        error(0)
-      end
+  	result = nil
+    if(tick_type == "master")
+      result = @scotzilla.find_master_ticket(args)
     end
+    if(tick_type == "use")
+      result = @scotzilla.find_use_ticket(args)
+    end
+    puts result
+    return result
   end
 
   def write_to_csv(ticket_type)
@@ -414,3 +392,4 @@ class Scotty < Thor
 end
 
 Scotty.start
+
