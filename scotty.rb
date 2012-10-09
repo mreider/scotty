@@ -11,7 +11,7 @@ require 'csv'
 require 'json'
 require 'open3'
 require 'thor'
-require './sz_api'
+require_relative 'sz_api'
 
 class Scotty < Thor
 
@@ -269,45 +269,31 @@ class Scotty < Thor
   end
 
   def parse_node_packages(file_path)
-     info "Parsing " + file_path
+    info "Parsing " + file_path
     subdir = file_path.scan(/\/software\/\w*/)
     json = File.read(file_path)
     begin
-    result = JSON.parse(json)
+      result = JSON.parse(json)
     rescue
       return
     end
-    unless(result['name'].nil?)
-      to_be_pushed = Hash.new
-      to_be_pushed[:subdir] = subdir
-      to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + result['name']
-      to_be_pushed[:name] = result['name']
-      to_be_pushed[:version] = result['version'].gsub("x", "0").gsub(">=","").gsub("*","1.0.0") #some of these versions are 1.0.x
-      @components.push(to_be_pushed)
-    end
-    #package.json has dependency and devDependency hashes
-    unless(result['dependencies'].nil?) 
-      result['dependencies'].each do |k,v|
-        dependencies_to_be_pushed = Hash.new
-        dependencies_to_be_pushed[:subdir] = subdir
-        dependencies_to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + k
-        dependencies_to_be_pushed[:name] = k
-        dependencies_to_be_pushed[:version] = v.gsub("x", "0").gsub(">=","").gsub("*","1.0.0") #some of these versions are 1.0.x
-        @components.push(dependencies_to_be_pushed)
-      end
-    end
 
-    unless(result['devDependencies'].nil?)
-      result['devDependencies'].each do |k,v|
-        dev_dependencies_to_be_pushed = Hash.new
-        dev_dependencies_to_be_pushed[:subdir] = subdir
-        dev_dependencies_to_be_pushed[:download_url] = "http://search.npmjs.org/#/" + k
-        dev_dependencies_to_be_pushed[:name] = k
-        dev_dependencies_to_be_pushed[:version] = v.gsub("x", "0").gsub(">=","").gsub("*","1.0.0") #some of these versions are 1.0.x
-        @components.push(dev_dependencies_to_be_pushed)
-      end
-    end
+    # push the package itself
+    push_node_component(subdir, result['name'], result['version']) unless result['name'].nil?
+    
+    # push the dependency and devDependency hashes
+    result['dependencies'].each { |k,v| push_node_component(subdir, k, v) } unless result['dependencies'].nil?
+    result['devDependencies'].each { |k,v| push_node_component(subdir, k, v) } unless result['devDependencies'].nil?
       
+  end
+
+  def push_node_component(subdir, name, version)
+  	@components << {
+      :subdir => subdir,
+      :download_url => "http://search.npmjs.org/#/" + name,
+      :name => name,
+      :version => version.gsub("x", "0").gsub(">=","").gsub("*","1.0.0") #some of these versions are 1.0.x 		
+  	}
   end
 
   def parse_gemfile_lock(file_path)
