@@ -15,14 +15,8 @@ require './sz_api'
 
 class Scotty < Thor
 
-    @config = {}
-    @components = {}
-    @checked_components = {}
-    @directory = "software"  # currently unused
-   
-    # Initialize opens a yaml file from ~/.scotty and loads it into the :config hash
-    # If no ~/.scotty exists, it will create one. Sorry to clutter up your home directory
-  
+  # Initialize opens a yaml file from ~/.scotty and loads it into the :config hash
+  # If no ~/.scotty exists, it will create one. Sorry to clutter up your home directory  
   def initialize(*args)
     super
     my_init
@@ -340,7 +334,7 @@ class Scotty < Thor
     top_level_pom.each {|top|
       info "Running mvn install for " + top
       top_minus = top.chomp("pom.xml")
-      system("cd " + top_minus + ";mvn install ;mvn dependency:list | tee delete_me.txt")
+      system("cd " + top_minus + ";mvn install > /dev/null ;mvn dependency:list | tee delete_me.txt")
       info "Parsing dependency list..."
       f = File.open(top_minus+"delete_me.txt")
       results = f.readlines
