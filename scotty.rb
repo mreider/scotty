@@ -16,10 +16,9 @@ class Scotty < Thor
 
     @server = {}
     @config = {}
-    @result = {}
     @components = {}
     @checked_components = {}
-    @directory = "software"
+    @directory = "software"  # currently unused
    
     # Initialize opens a yaml file from ~/.scotty and loads it into the :config hash
     # If no ~/.scotty exists, it will create one. Sorry to clutter up your home directory
@@ -55,20 +54,28 @@ class Scotty < Thor
       when "master"
         info "Parsing missing_master_tickets.csv and creating new master tickets"
         CSV.foreach("missing_master_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
-          @args = {:name => row_data[1], :version => row_data[2], :license_text => row_data[3], :description => row_data[4],
-            :license_name => row_data[5], :source_url => row_data[6], :category => row_data[7], :modified => row_data[8],
-            :username => @config['user'], :password => @config['password']
-          }
-          create_tickets("master")
+          create_tickets("master", { :name => row_data[1], 
+          		                       :version => row_data[2], 
+          		                       :license_text => row_data[3], 
+          		                       :description => row_data[4],
+          		                       :license_name => row_data[5],
+          		                       :source_url => row_data[6], 
+          		                       :category => row_data[7], 
+          		                       :modified => row_data[8],
+          		                       :username => @config['user'],
+          		                       :password => @config['password'] })
         end
 
       when "use"
         info "Parsing missing_use_tickets.csv and creating new tickets"
         CSV.foreach("missing_use_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
-          @args = { :product => row_data[1], :version => @config['product_version'], :mte => row_data[0].to_i ,
-            :interaction => @config['interaction'], :description => @config['description'], :username => @config['user'],
-            :password => @config['password'] }
-          create_tickets("use")
+          create_tickets("use", { :product => row_data[1],
+          		                    :version => @config['product_version'], 
+          		                    :mte => row_data[0].to_i,
+          		                    :interaction => @config['interaction'],
+          		                    :description => @config['description'],
+          		                    :username => @config['user'],
+          		                    :password => @config['password'] })
         end
         write_to_csv("use")
       else
@@ -107,9 +114,10 @@ class Scotty < Thor
         info "Searching for existing master tickets in Scotzilla"
         @components.each do |component|
         puts component[:name]
-        @args = { :name => component[:name].downcase, :version => component[:version].downcase, :category => @config['category']}
-        find_tickets("master")
-        @result['download_url'] = component[:download_url]
+        result = find_tickets("master", { :name => component[:name].downcase,
+                                          :version => component[:version].downcase, 
+                                          :category => @config['category'] })
+        result['download_url'] = component[:download_url]
         begin
           if component[:subdir].to_s =~ /"/
             tmp_str = "cf-" + component[:subdir].to_s.match('software\/(.*)"')[1]
@@ -119,16 +127,17 @@ class Scotty < Thor
         rescue
           tmp_str = component[:subdir]
         end
-        @result['subdir'] = tmp_str
-        @checked_components.push(@result)
+        result['subdir'] = tmp_str
+        @checked_components.push(result)
         end
         write_to_csv("master")
       when "use"
         info "Parsing found_master_tickets.csv and checking for use tickets in Scotzilla"
         CSV.foreach("found_master_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
-          @args = { :product => row_data[9], :version => @config['product_version'], :mte => row_data[0].to_i}
-          find_tickets("use")
-          @checked_components.push(@result)
+          result = find_tickets("use", { :product => row_data[9],
+                                         :version => @config['product_version'],
+                                         :mte => row_data[0].to_i})
+          @checked_components.push(result)
         end
         write_to_csv("use")
       else
@@ -140,21 +149,18 @@ class Scotty < Thor
     puts "[INFO] " + message
   end
 
-  def create_tickets(tick_type)
+  def create_tickets(tick_type, args)
     begin
+      result = nil
       if(tick_type == "master")
-        @result = ""
-        begin
-        @result = @server.call("SCOTzilla.create_master", @args)
-        rescue
-        info "fail!!!" + @args.to_s
-        end
-        puts @result
-      end
+				result = @server.call("SCOTzilla.create_master", args)
+			end
       if(tick_type == "use")
-        @result = @server.call("SCOTzilla.create_request", @args)
-        puts @result
+        result = @server.call("SCOTzilla.create_request", args)
       end
+      puts result
+      return result
+      
     rescue => e
       if e =~ /SocketError/
         error(2)
@@ -165,20 +171,23 @@ class Scotty < Thor
     end
   end
 
-  def find_tickets(tick_type)
-    puts @args
+  def find_tickets(tick_type, args)
     begin
+    	result = ""
       if(tick_type == "master")
-        @result = @server.call("SCOTzilla.find_master", @args)
+        result = @server.call("SCOTzilla.find_master", args)
       end
       if(tick_type == "use")
-        @result = @server.call("SCOTzilla.find_requests", @args)
+        result = @server.call("SCOTzilla.find_requests", args)
       end
+      puts result
+      return result
+      
     rescue => e
       if e =~ /SocketError/
         error(2)
       else
-        puts @result
+        puts result
         puts e
         error(0)
       end
