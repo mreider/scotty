@@ -173,18 +173,6 @@ class Scotty < Thor
     result
   end
 
-  def find_master_ticket(args)
-    result = @scotzilla.find_master_ticket(args)
-    puts result
-    result
-  end
-  
-  def find_use_ticket(args)
-    result = @scotzilla.find_use_ticket(args)
-    puts result
-    result
-  end
-
   def write_found_master_tickets(components)
     counter = 0
     CSV.open(FOUND_MASTER_CSV, 'wb') do |csv|
@@ -213,14 +201,14 @@ class Scotty < Thor
   def write_found_use_tickets(tickets)
     counter = 0
     CSV.open(FOUND_USE_CSV, 'wb') do |csv|
-      csv << ['mte','product','version','id','interaction','description','is_modified','features']
+      csv << ['mte','product','version','id','interaction','description','is_modified','features','status','resolution']
       counter = 0
       tickets.each {|elem|
           counter += 1
           csv << [elem['mte'],elem['product'],elem['version'],"","","","",""]
           elem['requests'].each {|item|
-            csv << ["","","",item['id'], item['interactions'].join,@config['description'],
-                    item['is_modified'],item['features'].join] 
+            csv << ['','','',item['id'], item['interactions'].join,@config['description'],
+                    item['modified'],item['features'].join,item['status'],item['resolution']] 
           }    
       }
     end
