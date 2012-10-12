@@ -27,18 +27,18 @@ class SZ_API
   private
   
   def call(method, args)
-  	begin
-     @server.call(method, args)
-   
-   rescue => e
-   	 puts "Error calling #{method} with #{args}"
-     if e =~ /SocketError/
-       error(2)
-     else
-       puts e
-       error(0)
-     end
-   end
+    begin
+      @server.call_async(method, args)
+
+    rescue => e
+   	  puts "Error calling #{method} with #{args}"
+      if e =~ /SocketError/
+        error(2) # undef
+      else
+        puts e
+        error(0) # undef
+      end
+    end
    
   end
   

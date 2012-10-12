@@ -11,10 +11,47 @@ require 'csv'
 require 'json'
 require 'open3'
 require 'thor'
+
 require_relative 'sz_api'
+require_relative 'ticket_finder'
 
 class Scotty < Thor
 
+  FOUND_MASTER_CSV = 'found_master_tickets.csv'	
+  MISSING_MASTER_CSV = 'missing_master_tickets.csv'
+  FOUND_USE_CSV = 'found_use_tickets.csv'
+  MISSING_USE_CSV = 'missing_use_tickets.csv'
+      
+  class Component
+    attr_accessor :name, :version, :subdir, :download_url, :category, :result
+    def initialize(name, version, subdir, download_url, category)
+      self.name = name
+      self.version = version
+      self.subdir = subdir
+      self.download_url = download_url
+      self.category = category
+      @key = nil
+    end
+    def id
+      self.result['id'] if self.result
+    end
+    def sz_name
+      self.name.downcase
+    end
+    def sz_version
+      self.version.downcase
+    end
+    def sz_args
+      { :name => self.sz_name,
+        :version => self.sz_version,
+        :category => self.category }
+    end
+    def key
+      @key = [ sz_name, ':', sz_version ].join unless @key
+      @key
+    end
+  end
+  
   # Initialize opens a yaml file from ~/.scotty and loads it into the :config hash
   # If no ~/.scotty exists, it will create one. Sorry to clutter up your home directory  
   def initialize(*args)
@@ -26,16 +63,19 @@ class Scotty < Thor
   method_option :ticket_type, :default => "master", :aliases => "-r", :desc => "sets request type to search for (master or use)"
 
   def scan
-    # master tickets require that software be in a directory to scan
-    if(options.ticket_type == "master")
-      unless(File::directory?( "software"))
-        error(5)
-      end
-    end
-    
+    @ticket_finder = TicketFinder.new(@config['host'], "/" + @config['path'], @config['port'],
+                                      @config['use_ssl'], @config['user'], @config['password'])
     # search tickets for master or use tickets...
-    search_tickets(options.ticket_type.downcase)
-
+    case options.ticket_type
+      when 'master'
+        # master tickets require that software be in a directory to scan
+        error(5) unless File::directory?('software')
+        search_master_tickets
+      when 'use'
+        search_use_tickets
+      else
+        error(7)
+    end
   end
 
   desc "create","create tickets based on spreadsheets for not found (master) or found (use) tickets"
@@ -48,40 +88,39 @@ class Scotty < Thor
       when "master"
         info "Parsing missing_master_tickets.csv and creating new master tickets"
         CSV.foreach("missing_master_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
-          create_tickets("master", { :name => row_data[1], 
-          		                       :version => row_data[2], 
-          		                       :license_text => row_data[3], 
-          		                       :description => row_data[4],
-          		                       :license_name => row_data[5],
-          		                       :source_url => row_data[6], 
-          		                       :category => row_data[7], 
-          		                       :modified => row_data[8],
-          		                       :username => @config['user'],
-          		                       :password => @config['password'] })
+          create_master_ticket({ :name => row_data[1], 
+                                  :version => row_data[2], 
+                                  :license_text => row_data[3], 
+                                  :description => row_data[4],
+                                  :license_name => row_data[5],
+                                  :source_url => row_data[6], 
+                                  :category => row_data[7], 
+                                  :modified => row_data[8],
+                                  :username => @config['user'],
+                                  :password => @config['password'] })
         end
 
       when "use"
         info "Parsing missing_use_tickets.csv and creating new tickets"
         CSV.foreach("missing_use_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
-          create_tickets("use", { :product => row_data[1],
-          		                    :version => @config['product_version'], 
-          		                    :mte => row_data[0].to_i,
-          		                    :interaction => @config['interaction'],
-          		                    :description => @config['description'],
-          		                    :username => @config['user'],
-          		                    :password => @config['password'] })
+          create_use_ticket({ :product => row_data[1],
+                               :version => @config['product_version'], 
+                               :mte => row_data[0].to_i,
+                               :interaction => @config['interaction'],
+                               :description => @config['description'],
+                               :username => @config['user'],
+                               :password => @config['password'] })
         end
-        write_to_csv("use")
+        
       else
         error(7)
-      end
+    end
   end
   
   private 
 
   def my_init
-    @components = []
-    @checked_components = []
+    @components = {}
     stdin, stdout, stderr = Open3.popen3('cat ~/.scotty')
     @yaml = ""
     stdout.each_line { |line| @yaml = @yaml + line }
@@ -97,143 +136,107 @@ class Scotty < Thor
   def parse_gpl
     traverse
   end
-
-  def search_tickets(ticket_type)
-    case ticket_type
-      when "master"
-        traverse
-        @components.uniq! { |e| e[:name].downcase + e[:version].to_str.downcase }
-        info "Duplicates removed"
-        info "Searching for existing master tickets in Scotzilla"
-        @components.each do |component|
-        puts component[:name]
-        result = find_tickets("master", { :name => component[:name].downcase,
-                                          :version => component[:version].downcase, 
-                                          :category => @config['category'] })
-        result['download_url'] = component[:download_url]
-        begin
-          if component[:subdir].to_s =~ /"/
-            tmp_str = "cf-" + component[:subdir].to_s.match('software\/(.*)"')[1]
-          else
-            tmp_str = "cf-" + component[:subdir].to_s.match('software\/(.*)\/')[1]
-          end
-        rescue
-          tmp_str = component[:subdir]
-        end
-        result['subdir'] = tmp_str
-        @checked_components.push(result)
-        end
-        write_to_csv("master")
-      when "use"
-        info "Parsing found_master_tickets.csv and checking for use tickets in Scotzilla"
-        CSV.foreach("found_master_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
-          result = find_tickets("use", { :product => row_data[9],
-                                         :version => @config['product_version'],
-                                         :mte => row_data[0].to_i})
-          @checked_components.push(result)
-        end
-        write_to_csv("use")
-      else
-        error(7)
-    end 
+  
+  def search_master_tickets
+    traverse
+    checked = @ticket_finder.master_results.partition {|c| c.result['stat'] == 'ok'}
+    write_found_master_tickets(checked[0])
+    write_missing_master_tickets(checked[1])
+    info "Check the spreadsheet, modify it, and run 'scotty scan -r use' to see how many use tickets are available"
+  end
+   
+  def search_use_tickets
+    info "Parsing #{FOUND_MASTER_CSV} and checking for use tickets in Scotzilla"
+     CSV.foreach(FOUND_MASTER_CSV, :headers => :first_row, :return_headers => false) do |row_data|
+       @ticket_finder.find_use({ :product => row_data[9],
+                                 :version => @config['product_version'],
+                                 :mte => row_data[0].to_i})
+     end
+     checked = @ticket_finder.use_results.partition{|t| t['stat'] == 'ok'}
+     write_found_use_tickets(checked[0])
+     write_missing_use_tickets(checked[1])
   end
 
   def info(message)
     puts "[INFO] " + message
   end
 
-  def create_tickets(tick_type, args)  	
-    result = nil
-    if(tick_type == "master")
-      result = @scotzilla.create_master_ticket(args)
-  	end
-    if(tick_type == "use")
-      result = @scotzilla.create_use_ticket(args)
-    end
+  def create_master_ticket(args)  	
+    result = @scotzilla.create_master_ticket(args)
     puts result
-    return result
+    result
+  end
+ 
+  def create_use_ticket(args)
+    result = @scotzilla.create_use_ticket(args)
+    puts result
+    result
   end
 
-  def find_tickets(tick_type, args)
-  	result = nil
-    if(tick_type == "master")
-      result = @scotzilla.find_master_ticket(args)
-    end
-    if(tick_type == "use")
-      result = @scotzilla.find_use_ticket(args)
-    end
+  def find_master_ticket(args)
+    result = @scotzilla.find_master_ticket(args)
     puts result
-    return result
+    result
+  end
+  
+  def find_use_ticket(args)
+    result = @scotzilla.find_use_ticket(args)
+    puts result
+    result
   end
 
-  def write_to_csv(ticket_type)
-
-    if(ticket_type == "master")
-      CSV.open("found_master_tickets.csv", "wb") do |csv|
-        csv << ["id","name","version","license_text","description","license_name","source_url","category","is_modified","repo"] 
-        counter = 0
-        @checked_components.each {|elem| 
-            if(elem['stat'] == "ok")
-               counter =  counter + 1
-               #Clean up [Master Ticket] rest-client - 1.6.7 to be three seperate columns
-               elem['desc'].slice! "[Master Ticket] "
-               tmp = elem['desc'].split
-               tmp.delete_at(1)
-               # Shove stuff in a CSV
-               csv << [elem['id'],tmp[0].downcase,tmp[1].downcase,@config['license_text'],"",
-                 @config['license_name'],elem['download_url'],@config['category'],"No",elem['subdir']] 
-            end
-          }
-      info "Wrote " + counter.to_s + " records to found_master_tickets.csv"
-      end
-      counter = 0
-      CSV.open("missing_master_tickets.csv", "wb") do |csv|
-        csv << ["id","name","version","license_text","description","license_name","source_url","category","is_modified","repo"]
-        @checked_components.each {|elem| 
-          if(elem['stat'] == "err")
-            counter = counter + 1
-            version = elem['data'][1]
-            version.downcase unless not version.respond_to? :downcase
-            csv << ["", elem['data'][0].downcase, version, @config['license_text'], "", @config['license_name'],
-                    elem['download_url'], elem['data'][2], "No", elem['subdir']]
-          end
-        }
-      end
-      info "Wrote " + counter.to_s + " records to missing_master_tickets.csv"
-      info "Check the spreadsheet, modify it, and run 'scotty scan -r use' to see how many use tickets are available"
-    
-    elsif(ticket_type == "use")
-      counter = 0
-      CSV.open("found_use_tickets.csv", "wb") do |csv|
-        csv << ["mte","product","version","id","interaction","description","is_modified","features"]
-        counter = 0
-        @checked_components.each {|elem| 
-            if(elem['stat'] == "ok")
-              counter =  counter + 1
-               csv << [elem['mte'],elem['product'],elem['version'],"","","","",""]
-                 elem['requests'].each {|item|
-                   csv << ["","","",item['id'], item['interactions'].join,@config['description'],
-                   item['is_modified'],item['features'].join] 
-                 }
-              
-            end
-          }
-      end
-      info "Wrote " + counter.to_s + " records to found_use_tickets.csv"
-
-      counter = 0
-      CSV.open("missing_use_tickets.csv", "wb") do |csv|
-        csv << ["mte","product","version","id","interaction","description","is_modified","features"]
-        counter = 0
-        @checked_components.each {|elem| 
-            if(elem['stat'] == "err")
-               counter =  counter + 1
-               csv << [elem['data'][2], elem['data'][0],elem['data'][1]]
-            end
-          }
-      end
-      info "Wrote " + counter.to_s + " records to missing_use_tickets.csv"
+  def write_found_master_tickets(components)
+    counter = 0
+    CSV.open(FOUND_MASTER_CSV, 'wb') do |csv|
+      csv << ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo'] 
+      components.each { |c| 
+          counter +=  1
+          csv << [c.id, c.name, c.version, @config['license_text'], '', @config['license_name'], c.download_url, c.category, 'No', c.subdir] 
+      }
     end
+    info "Wrote #{counter} records to #{FOUND_MASTER_CSV}"
+  end
+  
+  def write_missing_master_tickets(components)
+    counter = 0
+    CSV.open(MISSING_MASTER_CSV, 'wb') do |csv|
+      csv << ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo'] 
+      components.map { |c| 
+          counter +=  1
+          data = c.result['data']
+          csv << ['', data[0], data[1], @config['license_text'], '', @config['license_name'], c.download_url, data[2], '', c.subdir] 
+      }
+    end
+    info "Wrote #{counter} records to #{MISSING_MASTER_CSV}"
+  end
+  
+  def write_found_use_tickets(tickets)
+    counter = 0
+    CSV.open(FOUND_USE_CSV, 'wb') do |csv|
+      csv << ['mte','product','version','id','interaction','description','is_modified','features']
+      counter = 0
+      tickets.each {|elem|
+          counter += 1
+          csv << [elem['mte'],elem['product'],elem['version'],"","","","",""]
+          elem['requests'].each {|item|
+            csv << ["","","",item['id'], item['interactions'].join,@config['description'],
+                    item['is_modified'],item['features'].join] 
+          }    
+      }
+    end
+    info "Wrote #{counter} records to #{FOUND_USE_CSV}"
+  end
+  
+  def write_missing_use_tickets(tickets)
+    counter = 0
+    CSV.open(MISSING_USE_CSV, 'wb') do |csv|
+      csv << ['mte','product','version','id','interaction','description','is_modified','features']      
+      tickets.each {|elem| 
+        counter += 1
+        csv << [elem['data'][2], elem['data'][0],elem['data'][1],'','',elem ? elem.to_s : '']
+      }
+    end
+    info "Wrote #{counter} records to #{MISSING_USE_CSV}"
   end
 
   def traverse
@@ -267,6 +270,25 @@ class Scotty < Thor
       error(1)
     end
   end
+  
+  def push_component(name, version, subdir, download_url)
+    component = Component.new(name, version, subdir, download_url, @config['category'])  	
+    unless @components.include? component.key
+      begin
+        if component.subdir.to_s =~ /"/
+          tmp_str = "cf-" + component.subdir.to_s.match('software\/(.*)"')[1]
+        else
+          tmp_str = "cf-" + component.subdir.to_s.match('software\/(.*)\/')[1]
+        end
+      rescue
+        tmp_str = component.subdir
+      end
+      component.subdir = tmp_str
+      puts "Found #{component.name} #{component.version}"
+      @components[component.key] = component
+      @ticket_finder.find_master(component)
+    end
+  end
 
   def parse_node_packages(file_path)
     info "Parsing " + file_path
@@ -279,21 +301,19 @@ class Scotty < Thor
     end
 
     # push the package itself
-    push_node_component(subdir, result['name'], result['version']) unless result['name'].nil?
+    push_node_component(result['name'], result['version'], subdir) unless result['name'].nil?
     
     # push the dependency and devDependency hashes
-    result['dependencies'].each { |k,v| push_node_component(subdir, k, v) } unless result['dependencies'].nil?
-    result['devDependencies'].each { |k,v| push_node_component(subdir, k, v) } unless result['devDependencies'].nil?
+    result['dependencies'].each { |k,v| push_node_component(k, v, subdir) } unless result['dependencies'].nil?
+    result['devDependencies'].each { |k,v| push_node_component(k, v, subdir) } unless result['devDependencies'].nil?
       
   end
 
-  def push_node_component(subdir, name, version)
-  	@components << {
-      :subdir => subdir,
-      :download_url => "http://search.npmjs.org/#/" + name,
-      :name => name,
-      :version => version.gsub("x", "0").gsub(">=","").gsub("*","1.0.0") #some of these versions are 1.0.x 		
-  	}
+  def push_node_component(name, version, subdir)
+    push_component(name, 
+                   version.gsub("x", "0").gsub(">=","").gsub("*","1.0.0"), #some of these versions are 1.0.x
+                   subdir,
+                   "http://search.npmjs.org/#/#{name}")
   end
 
   def parse_gemfile_lock(file_path)
@@ -305,17 +325,13 @@ class Scotty < Thor
     results.each do |n|
       if(n =~ /\((?:(\d+)\.)?(?:(\d+)\.)?(\*|\d+)\)/)
         raw_materials = n.split("(")
-        to_be_pushed = Hash.new
-        to_be_pushed[:subdir] = subdir
-        to_be_pushed[:name] = raw_materials[0].strip!
-        to_be_pushed[:download_url] = "http://rubygems.org/gems/" + to_be_pushed[:name]
-        t = (raw_materials[1].strip!)
-        to_be_pushed[:version] = t.gsub(/\)/,"")
-        @components.push(to_be_pushed)
+        name = raw_materials[0].strip!
+        version = (raw_materials[1].strip!).gsub(/\)/,"")
+        push_component(name, version, subdir, "http://rubygems.org/gems/#{name}")
       end
     end
-  end
-
+  end  
+  
   def parse_maven_packages(top_level_pom)
     top_level_pom.each {|top|
       info "Running mvn install for " + top
@@ -335,12 +351,7 @@ class Scotty < Thor
           if (raw_materials[3].size == 1)
             raw_materials[3] = raw_materials[3] + ".0.0"
           end
-          to_be_pushed = Hash.new
-          to_be_pushed[:subdir] = top_minus
-          to_be_pushed[:download_url] = "http://search.maven.org/#search|ga|1|g:" + raw_materials[0]
-          to_be_pushed[:name] = raw_materials[1]
-          to_be_pushed[:version] = raw_materials[3]
-          @components.push(to_be_pushed)
+          push_component(raw_materials[1], raw_materials[3], top_minus, "http://search.maven.org/#search|ga|1|g:#{raw_materials[0]}")
         end
       end
     }
@@ -364,7 +375,7 @@ class Scotty < Thor
          puts "[ERROR] Cannot find " + options.directory
       when 7
          puts "[ERROR] Invalid ticket_type - values can be either 'master' or 'use'" 
-     end
+    end
     puts "\n\n"
     exit
   end
