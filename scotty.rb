@@ -14,6 +14,9 @@ require 'thor'
 
 require_relative 'sz_api'
 require_relative 'ticket_finder'
+require_relative 'golang_parser'
+require_relative 'golang_std_lib'
+require_relative 'golang_repositories'
 
 class Scotty < Thor
 
@@ -230,30 +233,36 @@ class Scotty < Thor
   def traverse
     found_components = false
     # First let's look for some ruby and node
-      Find.find("software") do |path|
-        if FileTest.directory?(path)
-          if File.basename(path)[0] == ?.
-            Find.prune       # Don't look any further into this directory.
-          else
-            next
-          end
+    Find.find("software") do |path|
+      file = File.basename(path)
+      if FileTest.directory?(path)
+        if file[0] == ?.
+          # don't look any further into this directory.
+          Find.prune       
         else
-          if File.basename(path) == "Gemfile.lock"
-            found_components = true
-            parse_gemfile_lock(File.expand_path(path))
-          elsif File.basename(path) == "package.json"
-            found_components = true
-            parse_node_packages(File.expand_path(path))
-          end
+          next
+        end
+      else          
+        if file == 'Gemfile.lock'
+          found_components = true
+          parse_gemfile_lock(File.expand_path(path))
+        elsif file == 'package.json'
+          found_components = true
+          parse_node_packages(File.expand_path(path))
+        elsif File.extname(file) == '.go'
+          found_components = true
+          parse_golang_packages(File.expand_path(path))
         end
       end
+    end
 
-      #now let's look for some maven
-      top_level_pom = Dir["software" + '/*/pom.xml']
-      unless(top_level_pom.nil?)
-        found_components = true
-        parse_maven_packages(top_level_pom)
-      end   
+    #now let's look for some maven
+    top_level_pom = Dir["software" + '/*/pom.xml']
+    unless(top_level_pom.nil?)
+      found_components = true
+      parse_maven_packages(top_level_pom)
+    end
+      
     if(found_components == false)
       error(1)
     end
@@ -343,6 +352,18 @@ class Scotty < Thor
         end
       end
     }
+  end
+  
+  def parse_golang_packages(file_path)
+    info "Parsing " + file_path
+    subdir = file_path.scan(/\/software\/\w*/)
+    
+    parser = GolangParser.new
+    import_paths = parser.get_import_paths(file_path)
+    GolangStdLib.remove_standard_packages(import_paths).each do |path|
+    	# if path does not contain any host prefix, assume this dep is one of ours and ignore
+  		push_component(File.basename(path), '?.?.?', subdir, GolangRepositories.map_download_url(path)) if path.include?('/')
+    end
   end
 
   def error(code)
