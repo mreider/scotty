@@ -25,6 +25,8 @@ class Scotty < Thor
   FOUND_USE_CSV = 'found_use_tickets.csv'
   MISSING_USE_CSV = 'missing_use_tickets.csv'
       
+  GITLOG_DATE=/Date:.*?(?<year>\d{4})/
+
   class Component
     attr_accessor :name, :version, :subdir, :download_url, :category, :result
     def initialize(name, version, subdir, download_url, category)
@@ -118,6 +120,36 @@ class Scotty < Thor
       else
         error(7)
     end
+  end
+  
+  desc "copyright_years", "prints the copyright years for each repo to STDOUT"
+  
+  def copyright_years
+
+    Dir.chdir('./software')
+    
+    Dir.foreach('.') do |f|
+      next if f[0] == '.'
+      next if File.file? f
+    
+      Dir.chdir(f)
+      
+      first = last = nil
+      
+      `git --no-pager log`.each_line do |line|
+        if match = GITLOG_DATE.match(line)
+          first = match['year'] unless first
+          last = match['year']
+        end
+      end
+      
+      dates = first.eql?(last) ? first : "#{last}-#{first}"
+      
+      puts "#{f} #{dates}"
+      
+      Dir.chdir('..')      
+    end
+    Dir.chdir('..')    
   end
   
   private 
@@ -361,8 +393,8 @@ class Scotty < Thor
     parser = GolangParser.new
     import_paths = parser.get_import_paths(file_path)
     GolangStdLib.remove_standard_packages(import_paths).each do |path|
-    	# if path does not contain any host prefix, assume this dep is one of ours and ignore
-  		push_component(File.basename(path), '?.?.?', subdir, GolangRepositories.map_download_url(path)) if path.include?('/')
+      # if path does not contain any host prefix, assume this dep is one of ours and ignore
+      push_component(File.basename(path), '?.?.?', subdir, GolangRepositories.map_download_url(path)) if path.include?('/')
     end
   end
 
