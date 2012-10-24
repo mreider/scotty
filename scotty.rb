@@ -55,6 +55,9 @@ class Scotty < Thor
       @key = [ sz_name, ':', sz_version ].join unless @key
       @key
     end
+    def sz_product
+    	"cf-#{self.subdir}"
+    end
   end
   
   # Initialize opens a yaml file from ~/.scotty and loads it into the :config hash
@@ -94,27 +97,27 @@ class Scotty < Thor
         info "Parsing missing_master_tickets.csv and creating new master tickets"
         CSV.foreach("missing_master_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
           create_master_ticket({ :name => row_data[1], 
-                                  :version => row_data[2], 
-                                  :license_text => row_data[3], 
-                                  :description => row_data[4],
-                                  :license_name => row_data[5],
-                                  :source_url => row_data[6], 
-                                  :category => row_data[7], 
-                                  :modified => row_data[8],
-                                  :username => @config['user'],
-                                  :password => @config['password'] })
+                                 :version => row_data[2], 
+                                 :license_text => row_data[3], 
+                                 :description => row_data[4],
+                                 :license_name => row_data[5],
+                                 :source_url => row_data[6], 
+                                 :category => row_data[7], 
+                                 :modified => row_data[8],
+                                 :username => @config['user'],
+                                 :password => @config['password'] })
         end
 
       when "use"
         info "Parsing missing_use_tickets.csv and creating new tickets"
         CSV.foreach("missing_use_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
           create_use_ticket({ :product => row_data[1],
-                               :version => @config['product_version'], 
-                               :mte => row_data[0].to_i,
-                               :interaction => @config['interaction'],
-                               :description => @config['description'],
-                               :username => @config['user'],
-                               :password => @config['password'] })
+                              :version => @config['product_version'], 
+                              :mte => row_data[0].to_i,
+                              :interaction => @config['interaction'],
+                              :description => @config['description'],
+                              :username => @config['user'],
+                              :password => @config['password'] })
         end
         
       else
@@ -209,10 +212,10 @@ class Scotty < Thor
   def write_found_master_tickets(components)
     counter = 0
     CSV.open(FOUND_MASTER_CSV, 'wb') do |csv|
-      csv << ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo'] 
+      csv << ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo','sz_product'] 
       components.each { |c| 
           counter +=  1
-          csv << [c.id, c.name, c.version, @config['license_text'], '', @config['license_name'], c.download_url, c.category, 'No', c.subdir] 
+          csv << [c.id, c.name, c.version, @config['license_text'], '', @config['license_name'], c.download_url, c.category, 'No', c.subdir, c.sz_product] 
       }
     end
     info "Wrote #{counter} records to #{FOUND_MASTER_CSV}"
@@ -221,11 +224,11 @@ class Scotty < Thor
   def write_missing_master_tickets(components)
     counter = 0
     CSV.open(MISSING_MASTER_CSV, 'wb') do |csv|
-      csv << ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo'] 
+      csv << ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo','sz_product'] 
       components.map { |c| 
           counter +=  1
           data = c.result['data']
-          csv << ['', data[0], data[1], @config['license_text'], '', @config['license_name'], c.download_url, data[2], '', c.subdir] 
+          csv << ['', data[0], data[1], @config['license_text'], '', @config['license_name'], c.download_url, data[2], '', c.subdir, c.sz_product] 
       }
     end
     info "Wrote #{counter} records to #{MISSING_MASTER_CSV}"
@@ -301,21 +304,7 @@ class Scotty < Thor
   def push_component(name, version, subdir, download_url)
     component = Component.new(name, version, subdir, download_url, @config['category'])  	
     unless @components.include? component.key
-      begin
-        if component.subdir.to_s =~ /"/
-          tmp_str = "cf-" + component.subdir.to_s.match('software\/(.*)"')[1]
-        else
-          tmp_str = "cf-" + component.subdir.to_s.match('software\/(.*)\/')[1]
-        end
-      rescue
-        tmp_str = component.subdir
-      end
-      component.subdir = tmp_str
-      puts "Found #{component.name} #{component.version}"
-      if component.subdir =~ /^cf-cf.*/ 
-      	puts component.inspect
-      	exit 1
-      end
+      puts "Found #{component.name} #{component.version} in #{component.subdir}"
       @components[component.key] = component
       @ticket_finder.find_master(component)
     end
@@ -323,7 +312,7 @@ class Scotty < Thor
 
   def parse_node_packages(file_path)
     info "Parsing " + file_path
-    subdir = file_path.scan(/\/software\/\w*/)
+    subdir = component_dir_from_path(file_path)
     json = File.read(file_path)
     begin
       result = JSON.parse(json)
@@ -349,7 +338,7 @@ class Scotty < Thor
 
   def parse_gemfile_lock(file_path)
     info "Parsing " + file_path
-    subdir = file_path.scan(/\/software\/\w*/)
+    subdir = component_dir_from_path(file_path)
     f = File.open(file_path)
     results = f.readlines
     f.close
@@ -390,7 +379,7 @@ class Scotty < Thor
   
   def parse_golang_packages(file_path)
     info "Parsing " + file_path
-    subdir = file_path.scan(/\/software\/\w*/)
+    subdir = component_dir_from_path(file_path)
     
     parser = GolangParser.new
     import_paths = parser.get_import_paths(file_path)
@@ -400,6 +389,10 @@ class Scotty < Thor
     end
   end
 
+  def component_dir_from_path(path)
+  	path.match(/software\/(?<dir>.*?)\//)['dir'] 
+  end
+  
   def error(code)
     case code
       when 0
