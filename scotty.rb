@@ -25,7 +25,7 @@ class Scotty < Thor
   FOUND_USE_CSV = 'found_use_tickets.csv'
   MISSING_USE_CSV = 'missing_use_tickets.csv'
       
-  GITLOG_DATE=/Date:.*?(?<year>\d{4})/
+  GITLOG_DATE=/^Date:.*?(?<year>\d{4})/
 
   class Component
     attr_accessor :name, :version, :subdir, :download_url, :category, :result
@@ -128,7 +128,7 @@ class Scotty < Thor
 
     Dir.chdir('./software')
     
-    Dir.foreach('.') do |f|
+    Dir.entries('.').sort { |f1,f2| f1 <=> f2 }.each do |f|
       next if f[0] == '.'
       next if File.file? f
     
@@ -140,12 +140,10 @@ class Scotty < Thor
         if match = GITLOG_DATE.match(line)
           first = match['year'] unless first
           last = match['year']
-        end
+        end  
       end
-      
-      dates = first.eql?(last) ? first : "#{last}-#{first}"
-      
-      puts "#{f} #{dates}"
+
+      puts "#{f} " + first.eql?(last) ? first : "#{last}-#{first}"
       
       Dir.chdir('..')      
     end
@@ -314,6 +312,10 @@ class Scotty < Thor
       end
       component.subdir = tmp_str
       puts "Found #{component.name} #{component.version}"
+      if component.subdir =~ /^cf-cf.*/ 
+      	puts component.inspect
+      	exit 1
+      end
       @components[component.key] = component
       @ticket_finder.find_master(component)
     end
