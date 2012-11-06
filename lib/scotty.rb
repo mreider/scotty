@@ -81,7 +81,7 @@ module Scotty
       case options.ticket_type
         when 'master'
           # master tickets require that software be in a directory to scan
-          error(5) unless File::directory?('software')
+          error(5, options.directory) unless File::directory?('software')
           search_master_tickets
         when 'use'
           search_use_tickets
@@ -99,7 +99,7 @@ module Scotty
 
         when "master"
           info "Parsing missing_master_tickets.csv and creating new master tickets"
-          CSV.foreach("missing_master_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
+          CSV.foreach(MISSING_MASTER_CSV, :headers => :first_row, :return_headers => false) do |row_data|
             create_master_ticket({ :name => row_data[1],
                                    :version => row_data[2],
                                    :license_text => row_data[3],
@@ -114,7 +114,7 @@ module Scotty
 
         when "use"
           info "Parsing missing_use_tickets.csv and creating new tickets"
-          CSV.foreach("missing_use_tickets.csv", :headers => :first_row, :return_headers => false) do |row_data|
+          CSV.foreach(MISSING_USE_CSV, :headers => :first_row, :return_headers => false) do |row_data|
             create_use_ticket({ :product => row_data[1],
                                 :version => @config['product_version'],
                                 :mte => row_data[0].to_i,
@@ -157,6 +157,16 @@ module Scotty
       Dir.chdir('..')
     end
 
+    desc "print_count", "print the number of ticket records in each file to STDOUT"
+
+    def print_count
+      [ FOUND_MASTER_CSV, MISSING_MASTER_CSV,
+        FOUND_USE_CSV, MISSING_USE_CSV ].select { |f| File.exists? f }.each  do |csv|
+        lines = `wc -l '#{csv}'`.to_i - 1  # header row
+        info "#{lines} #{csv}"
+      end
+    end
+
     private
 
     def my_init
@@ -187,14 +197,15 @@ module Scotty
 
     def search_use_tickets
       info "Parsing #{FOUND_MASTER_CSV} and checking for use tickets in Scotzilla"
-       CSV.foreach(FOUND_MASTER_CSV, :headers => :first_row, :return_headers => false) do |row_data|
-         @ticket_finder.find_use({ :product => row_data[9],
-                                   :version => @config['product_version'],
-                                   :mte => row_data[0].to_i})
-       end
-       checked = @ticket_finder.use_results.partition{|t| t['stat'] == 'ok'}
-       write_found_use_tickets(checked[0])
-       write_missing_use_tickets(checked[1])
+      error(5, FOUND_MASTER_CSV) unless File.exists? FOUND_MASTER_CSV
+      CSV.foreach(FOUND_MASTER_CSV, :headers => :first_row, :return_headers => false) do |row_data|
+        @ticket_finder.find_use({ :product => row_data[10],
+                                  :version => @config['product_version'],
+                                  :mte => row_data[0].to_i})
+      end
+      checked = @ticket_finder.use_results.partition{|t| t['stat'] == 'ok'}
+      write_found_use_tickets(checked[0])
+      write_missing_use_tickets(checked[1])
     end
 
     def info(message)
@@ -242,15 +253,15 @@ module Scotty
       counter = 0
       CSV.open(FOUND_USE_CSV, 'wb') do |csv|
         csv << ['mte','product','version','id','interaction','description','is_modified','features','status','resolution']
-        counter = 0
-        tickets.each {|elem|
+        tickets.each do |elem|
+          elem['requests'].each do |item|
             counter += 1
-            csv << [elem['mte'],elem['product'],elem['version'],"","","","",""]
-            elem['requests'].each {|item|
-              csv << ['','','',item['id'], item['interactions'].join,@config['description'],
-                      item['modified'],item['features'].join,item['status'],item['resolution']]
-            }
-        }
+            csv << [ elem['mte'], elem['product'], elem['version'], item['id'],
+                     item['interactions'].join, @config['description'],
+                     item['modified'], item['features'].join, item['status'],
+                     item['resolution'] ]
+          end
+        end
       end
       info "Wrote #{counter} records to #{FOUND_USE_CSV}"
     end
@@ -300,9 +311,8 @@ module Scotty
         parse_maven_packages(top_level_pom)
       end
 
-      if(found_components == false)
-        error(1)
-      end
+
+      error(1, options.directory) unless found_components
     end
 
     def push_component(name, version, subdir, download_url)
@@ -340,18 +350,16 @@ module Scotty
                      "http://search.npmjs.org/#/#{name}")
     end
 
+    RUBY_NAME_VERSION = /^ {4}(?<name>.*?)\s\((?<version>(\d+\.)?(\d+\.)?(\*|\d+)?)\)/
+
     def parse_gemfile_lock(file_path)
       info "Parsing " + file_path
       subdir = component_dir_from_path(file_path)
-      f = File.open(file_path)
-      results = f.readlines
-      f.close
-      results.each do |n|
-        if(n =~ /\((?:(\d+)\.)?(?:(\d+)\.)?(\*|\d+)\)/)
-          raw_materials = n.split("(")
-          name = raw_materials[0].strip!
-          version = (raw_materials[1].strip!).gsub(/\)/,"")
-          push_component(name, version, subdir, "http://rubygems.org/gems/#{name}")
+      File.open(file_path) do |f|
+        f.each do |line|
+          if match = RUBY_NAME_VERSION.match(line)
+            push_component(match[:name], match[:version], subdir, "http://rubygems.org/gems/#{match[:name]}")
+          end
         end
       end
     end
@@ -388,7 +396,14 @@ module Scotty
       parser = GolangParser.new
       import_paths = parser.get_import_paths(file_path)
       GolangStdLib.remove_standard_packages(import_paths).each do |path|
-        # if path does not contain any host prefix, assume this dep is one of ours and ignore
+        # TODO: get version
+        # $ git show -s --format="%ci"
+        # 2012-10-17 09:19:08 -0700
+        #
+        # TODO: munge ISO 8601 date to US format
+        #
+
+        # TODO: if path does not contain any host prefix, assume this dep is one of ours and ignore
         push_component(File.basename(path), '?.?.?', subdir, GolangRepositories.map_download_url(path)) if path.include?('/')
       end
     end
