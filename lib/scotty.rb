@@ -18,6 +18,7 @@ require 'ticket_finder'
 require 'golang_parser'
 require 'golang_std_lib'
 require 'golang_repositories'
+require 'node_ver'
 
 module Scotty
 
@@ -240,11 +241,11 @@ module Scotty
       counter = 0
       CSV.open(MISSING_MASTER_CSV, 'wb') do |csv|
         csv << ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo','sz_product']
-        components.map { |c|
+        components.map do |c|
             counter +=  1
             data = c.result['data']
             csv << ['', data[0], data[1], @config['license_text'], '', @config['license_name'], c.download_url, data[2], '', c.subdir, c.sz_product]
-        }
+        end
       end
       info "Wrote #{counter} records to #{MISSING_MASTER_CSV}"
     end
@@ -344,10 +345,8 @@ module Scotty
     end
 
     def push_node_component(name, version, subdir)
-      push_component(name,
-                     version.gsub("x", "0").gsub(">=","").gsub("*","1.0.0"), #some of these versions are 1.0.x
-                     subdir,
-                     "http://search.npmjs.org/#/#{name}")
+      ver = NodeVer::parse(version) || "INVALID_VERSION"
+      push_component(name, ver, subdir, "http://search.npmjs.org/#/#{name}")
     end
 
     RUBY_NAME_VERSION = /^ {4}(?<name>.*?)\s\((?<version>(\d+\.)?(\d+\.)?(\*|\d+)?)\)/
@@ -364,26 +363,21 @@ module Scotty
       end
     end
 
+    MAVEN_NAME_VERSION = /^\[INFO\]\s{4}([^:]+)(?::([^:]*))(?::[^:]*)(?::(\d+(?:\.\d+(?:\.\d+(?:\.\d+)?)?)?(?:[^:]*)))/
+
     def parse_maven_packages(top_level_pom)
       top_level_pom.each {|top|
         info "Running mvn install for " + top
         top_minus = top.chomp("pom.xml")
         system("cd " + top_minus + ";mvn install > /dev/null ;mvn dependency:list | tee delete_me.txt")
         info "Parsing dependency list..."
-        f = File.open(top_minus+"delete_me.txt")
-        results = f.readlines
-        f.close
-        results.each do |n|
-          if(n =~ /:(.*):.*:(.*):/)
-            raw_materials = n.split(":")
-            raw_materials[0] = raw_materials[0].gsub(/\[INFO\]/,"")
-            raw_materials[0] = raw_materials[0].strip
-            raw_materials[1] = raw_materials[1].strip
-            raw_materials[3] = raw_materials[3].strip
-            if (raw_materials[3].size == 1)
-              raw_materials[3] = raw_materials[3] + ".0.0"
+        File.open(top_minus + 'delete_me.txt') do |f|
+          f.each do |line|
+            if MAVEN_NAME_VERSION =~ line
+              pkg, name, ver = $1, $2, $3
+              ver << ".0.0" if ver.length == 1
+              push_component(name, ver, top_minus, "http://search.maven.org/#search|ga|1|g:#{pkg}")
             end
-            push_component(raw_materials[1], raw_materials[3], top_minus, "http://search.maven.org/#search|ga|1|g:#{raw_materials[0]}")
           end
         end
       }
