@@ -36,7 +36,7 @@ class SearchContrib < Thor
     # filter
     bugs = bugs.select { |b| b[:name] =~ /#{query[:name]}/ } if query.include? :name
     bugs = bugs.select { |b| b[:version] =~ /#{query[:version]}/ } if query.include? :version
-    bugs = bugs.select { |b| b[:reporter] =~ /#{query[:reporter]}/ } if query.include? :version
+    bugs = bugs.select { |b| b[:reporter] =~ /#{query[:reporter]}/ } if query.include? :reporter
 
     # retval
     bugs
