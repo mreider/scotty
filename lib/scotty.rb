@@ -73,7 +73,7 @@ module Scotty
     end
 
     desc "scan","scan for existing tickets in Scotzilla"
-    method_option :ticket_type, :default => "master", :aliases => "-r", :desc => "sets request type to search for (master or use)"
+    method_option :ticket_type, :default => "master", :aliases => "-r", :desc => "sets request type to search for (master, use or all)"
 
     def scan
       @ticket_finder = TicketFinder.new(@config['host'], "/" + @config['path'], @config['port'],
@@ -81,10 +81,11 @@ module Scotty
       # search tickets for master or use tickets...
       case options.ticket_type
         when 'master'
-          # master tickets require that software be in a directory to scan
-          error(5, options.directory) unless File::directory?('software')
           search_master_tickets
         when 'use'
+          search_use_tickets
+        when 'all'
+          search_master_tickets
           search_use_tickets
         else
           error(7)
@@ -189,6 +190,9 @@ module Scotty
     end
 
     def search_master_tickets
+      # scanning master tickets require that software be in a directory to scan
+      error(5, 'software') unless File::directory?('software')
+
       traverse
       checked = @ticket_finder.master_results.partition {|c| c.result['stat'] == 'ok'}
       write_found_master_tickets(checked[0])
@@ -197,8 +201,10 @@ module Scotty
     end
 
     def search_use_tickets
-      info "Parsing #{FOUND_MASTER_CSV} and checking for use tickets in Scotzilla"
+      # scanning use tickets requires the found master tickets csv
       error(5, FOUND_MASTER_CSV) unless File.exists? FOUND_MASTER_CSV
+
+      info "Parsing #{FOUND_MASTER_CSV} and checking for use tickets in Scotzilla"
       CSV.foreach(FOUND_MASTER_CSV, :headers => :first_row, :return_headers => false) do |row_data|
         @ticket_finder.find_use({ :product => row_data[10],
                                   :version => @config['product_version'],
@@ -376,7 +382,8 @@ module Scotty
             if MAVEN_NAME_VERSION =~ line
               pkg, name, ver = $1, $2, $3
               ver << ".0.0" if ver.length == 1
-              push_component(name, ver, top_minus, "http://search.maven.org/#search|ga|1|g:#{pkg}")
+              # bug here -> top_minus is not correct;
+              push_component(name, ver, component_dir_from_path(top_minus), "http://search.maven.org/#search|ga|1|g:#{pkg}")
             end
           end
         end
