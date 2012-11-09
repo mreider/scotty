@@ -382,7 +382,6 @@ module Scotty
             if MAVEN_NAME_VERSION =~ line
               pkg, name, ver = $1, $2, $3
               ver << ".0.0" if ver.length == 1
-              # bug here -> top_minus is not correct;
               push_component(name, ver, component_dir_from_path(top_minus), "http://search.maven.org/#search|ga|1|g:#{pkg}")
             end
           end
