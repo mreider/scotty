@@ -15,6 +15,7 @@ require 'thor'
 require 'errors'
 require 'sz_api'
 require 'ticket_finder'
+require 'ticket_persistor'
 require 'golang_parser'
 require 'golang_std_lib'
 require 'golang_repositories'
@@ -23,21 +24,39 @@ require 'code_component'
 
 module Scotty
 
+  # load config
+  #
+  # Initialize opens a yaml file from ~/.scotty and loads it into the :config hash
+  # If no ~/.scotty exists, it will create one. Sorry to clutter up your home directory
+  #
+  stdin, stdout, stderr = Open3.popen3('cat ~/.scotty')
+  yaml = ''
+  stdout.each_line { |line| yaml << line }
+  if stderr.gets =~ /No such file or directory/
+    system("wget -O ~/.scotty http://vmcpush.com/scotty.txt -q")
+    error(3)
+  else
+    @@config = YAML::load(yaml)
+  end
+
+  #
+  # Returns the current configuration object
+  #
+  def self.config
+    @@config
+  end
+
   class Scotty < Thor
     include Errors
 
-    FOUND_MASTER_CSV = 'found_master_tickets.csv'
-    MISSING_MASTER_CSV = 'missing_master_tickets.csv'
-    FOUND_USE_CSV = 'found_use_tickets.csv'
-    MISSING_USE_CSV = 'missing_use_tickets.csv'
-
     GITLOG_DATE=/^Date:.*?(?<year>\d{4})/
 
-    # Initialize opens a yaml file from ~/.scotty and loads it into the :config hash
-    # If no ~/.scotty exists, it will create one. Sorry to clutter up your home directory
     def initialize(*args)
       super
-      my_init
+      @components = {}             # TODO: get rid of this
+      @config = ::Scotty.config    # TODO: use module config throughout
+      @scotzilla = SZ_API.new(@config['host'], "/" + @config['path'], @config['port'],
+                              @config['use_ssl'], @config['user'], @config['password'])
     end
 
     desc "scan","scan for existing tickets in Scotzilla"
@@ -72,32 +91,9 @@ module Scotty
       case options.ticket_type
 
         when "master"
-          info "Parsing missing_master_tickets.csv and creating new master tickets"
-          CSV.foreach(MISSING_MASTER_CSV, :headers => :first_row, :return_headers => false) do |row_data|
-            create_master_ticket({ :name => row_data[1],
-                                   :version => row_data[2],
-                                   :license_text => row_data[3],
-                                   :description => row_data[4],
-                                   :license_name => row_data[5],
-                                   :source_url => row_data[6],
-                                   :category => row_data[7],
-                                   :modified => row_data[8],
-                                   :username => @config['user'],
-                                   :password => @config['password'] })
-          end
-
+          create_master_tickets
         when "use"
-          info "Parsing missing_use_tickets.csv and creating new tickets"
-          CSV.foreach(MISSING_USE_CSV, :headers => :first_row, :return_headers => false) do |row_data|
-            create_use_ticket({ :product => row_data[1],
-                                :version => @config['product_version'],
-                                :mte => row_data[0].to_i,
-                                :interaction => @config['interaction'],
-                                :description => @config['description'],
-                                :username => @config['user'],
-                                :password => @config['password'] })
-          end
-
+          create_use_tickets
         else
           error(7)
       end
@@ -131,9 +127,9 @@ module Scotty
       Dir.chdir('..')
     end
 
-    desc "print_count", "print the number of ticket records in each file to STDOUT"
+    desc "print_counts", "print the number of ticket records in each file to STDOUT"
 
-    def print_count
+    def print_counts
       [ FOUND_MASTER_CSV, MISSING_MASTER_CSV,
         FOUND_USE_CSV, MISSING_USE_CSV ].select { |f| File.exists? f }.each  do |csv|
         lines = `wc -l '#{csv}'`.to_i - 1  # header row
@@ -143,32 +139,14 @@ module Scotty
 
     private
 
-    def my_init
-      @components = {}
-      stdin, stdout, stderr = Open3.popen3('cat ~/.scotty')
-      @yaml = ""
-      stdout.each_line { |line| @yaml = @yaml + line }
-        if(stderr.gets =~ /No such file or directory/)
-          system("wget -O ~/.scotty http://vmcpush.com/scotty.txt -q")
-          error(3)
-        end
-      @config = YAML::load(@yaml)
-      @scotzilla = SZ_API.new(@config['host'], "/" + @config['path'], @config['port'],
-                              @config['use_ssl'], @config['user'], @config['password'])
-    end
-
-    def parse_gpl
-      traverse
-    end
-
     def search_master_tickets(languages)
       # scanning master tickets require that software be in a directory to scan
       error(5, 'software') unless File::directory?('software')
 
       traverse(languages)
       checked = @ticket_finder.master_results.partition {|c| c.result['stat'] == 'ok'}
-      write_found_master_tickets(checked[0])
-      write_missing_master_tickets(checked[1])
+      TicketPersistor.write_found_master_tickets(checked[0])
+      TicketPersistor.write_missing_master_tickets(checked[1])
       info "Check the spreadsheet, modify it, and run 'scotty scan -r use' to see how many use tickets are available"
     end
 
@@ -177,85 +155,39 @@ module Scotty
       error(5, FOUND_MASTER_CSV) unless File.exists? FOUND_MASTER_CSV
 
       info "Parsing #{FOUND_MASTER_CSV} and checking for use tickets in Scotzilla"
-      CSV.foreach(FOUND_MASTER_CSV, :headers => :first_row, :return_headers => false) do |row_data|
-        next unless languages.include?(row_data[11])
-        @ticket_finder.find_use({ :product => row_data[10],
+      TicketPersistor.read_found_master_tickets do |ticket|
+        next unless languages.include?(ticket[:language])
+        @ticket_finder.find_use({ :product => ticket[:sz_product],
                                   :version => @config['product_version'],
-                                  :mte => row_data[0].to_i})
+                                  :mte => ticket[:id] })
       end
       checked = @ticket_finder.use_results.partition{|t| t['stat'] == 'ok'}
-      write_found_use_tickets(checked[0])
-      write_missing_use_tickets(checked[1])
+      TicketPersistor.write_found_use_tickets(checked[0])
+      TicketPersistor.write_missing_use_tickets(checked[1])
     end
 
     def info(message)
       puts "[INFO] " + message
     end
 
-    def create_master_ticket(args)
-      result = @scotzilla.create_master_ticket(args)
-      puts result
-      result
-    end
-
-    def create_use_ticket(args)
-      result = @scotzilla.create_use_ticket(args)
-      puts result
-      result
-    end
-
-    def write_found_master_tickets(components)
-      counter = 0
-      CSV.open(FOUND_MASTER_CSV, 'wb') do |csv|
-        csv << ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo','sz_product','language']
-        components.each { |c|
-            counter +=  1
-            csv << [c.id, c.name, c.version, @config['license_text'], '', @config['license_name'], c.download_url, c.category, 'No', c.subdir, c.sz_product, c.language]
-        }
+    def create_master_tickets
+      info "Parsing missing_master_tickets.csv and creating new master tickets"
+      TicketPersistor.read_missing_master_tickets do |data|
+        data[:username] = @config['user']
+        data[:password] = @config['password']
+        result = @scotzilla.create_master_ticket(data)
+        puts "Created? #{result}"
       end
-      info "Wrote #{counter} records to #{FOUND_MASTER_CSV}"
     end
 
-    def write_missing_master_tickets(components)
-      counter = 0
-      CSV.open(MISSING_MASTER_CSV, 'wb') do |csv|
-        csv << ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo','sz_product','language']
-        components.map do |c|
-            counter +=  1
-            data = c.result['data']
-            csv << ['', data[0], data[1], @config['license_text'], '', @config['license_name'], c.download_url, data[2], '', c.subdir, c.sz_product, c.language]
-        end
+    def create_use_tickets
+      info "Parsing missing_use_tickets.csv and creating new tickets"
+      TicketPersistor.read_missing_use_tickets do |data|
+        data[:username] = @config['user']
+        data[:password] = @config['password']
+        result = @scotzilla.create_use_ticket(data)
+        puts "Created? #{result}"
       end
-      info "Wrote #{counter} records to #{MISSING_MASTER_CSV}"
-    end
-
-    def write_found_use_tickets(tickets)
-      counter = 0
-      CSV.open(FOUND_USE_CSV, 'wb') do |csv|
-        csv << ['mte','product','version','id','interaction','description','is_modified','features','status','resolution']
-        tickets.each do |elem|
-          elem['requests'].each do |item|
-            counter += 1
-            csv << [ elem['mte'], elem['product'], elem['version'], item['id'],
-                     item['interactions'].join, @config['description'],
-                     item['modified'], item['features'].join, item['status'],
-                     item['resolution'] ]
-          end
-        end
-      end
-      info "Wrote #{counter} records to #{FOUND_USE_CSV}"
-    end
-
-    def write_missing_use_tickets(tickets)
-      counter = 0
-      CSV.open(MISSING_USE_CSV, 'wb') do |csv|
-        csv << ['mte','product','version','id','interaction','description','is_modified','features']
-        tickets.each {|elem|
-          counter += 1
-          csv << [elem['data'][2], elem['data'][0],elem['data'][1],'','',elem ? elem.to_s : '']
-        }
-      end
-      info "Wrote #{counter} records to #{MISSING_USE_CSV}"
     end
 
     def traverse(languages)

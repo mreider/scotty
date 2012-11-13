@@ -1,5 +1,5 @@
 #
-# CodeComponent.rb
+# code_component.rb
 #
 # Copyright 2012 © VMware, Inc.
 #
