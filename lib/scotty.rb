@@ -19,6 +19,7 @@ require 'golang_parser'
 require 'golang_std_lib'
 require 'golang_repositories'
 require 'node_ver'
+require 'code_component'
 
 module Scotty
 
@@ -32,39 +33,6 @@ module Scotty
 
     GITLOG_DATE=/^Date:.*?(?<year>\d{4})/
 
-    class Component
-      attr_accessor :name, :version, :subdir, :download_url, :category, :result
-      def initialize(name, version, subdir, download_url, category)
-        self.name = name
-        self.version = version
-        self.subdir = subdir
-        self.download_url = download_url
-        self.category = category
-        @key = nil
-      end
-      def id
-        self.result['id'] if self.result
-      end
-      def sz_name
-        self.name.downcase
-      end
-      def sz_version
-        self.version.downcase
-      end
-      def sz_args
-        { :name => self.sz_name,
-          :version => self.sz_version,
-          :category => self.category }
-      end
-      def key
-        @key = [ sz_name, ':', sz_version ].join unless @key
-        @key
-      end
-      def sz_product
-        "cf-#{self.subdir}"
-      end
-    end
-
     # Initialize opens a yaml file from ~/.scotty and loads it into the :config hash
     # If no ~/.scotty exists, it will create one. Sorry to clutter up your home directory
     def initialize(*args)
@@ -73,20 +41,24 @@ module Scotty
     end
 
     desc "scan","scan for existing tickets in Scotzilla"
-    method_option :ticket_type, :default => "master", :aliases => "-r", :desc => "sets request type to search for (master, use or all)"
+    method_option :ticket_type, :default => "master", :aliases => "-r", :type => :string, :desc => "Sets request type to search for (master, use or all)"
+    method_option :exclude_lang, :aliases => "-L", :type => :array, :desc => "Exclude languages from the search"
 
     def scan
       @ticket_finder = TicketFinder.new(@config['host'], "/" + @config['path'], @config['port'],
                                         @config['use_ssl'], @config['user'], @config['password'])
+
+      search_langs = LangOptions.new(options.exclude_lang).converse
+
       # search tickets for master or use tickets...
       case options.ticket_type
         when 'master'
-          search_master_tickets
+          search_master_tickets(search_langs)
         when 'use'
-          search_use_tickets
+          search_use_tickets(search_langs)
         when 'all'
-          search_master_tickets
-          search_use_tickets
+          search_master_tickets(search_langs)
+          search_use_tickets(search_langs)
         else
           error(7)
       end
@@ -189,23 +161,24 @@ module Scotty
       traverse
     end
 
-    def search_master_tickets
+    def search_master_tickets(languages)
       # scanning master tickets require that software be in a directory to scan
       error(5, 'software') unless File::directory?('software')
 
-      traverse
+      traverse(languages)
       checked = @ticket_finder.master_results.partition {|c| c.result['stat'] == 'ok'}
       write_found_master_tickets(checked[0])
       write_missing_master_tickets(checked[1])
       info "Check the spreadsheet, modify it, and run 'scotty scan -r use' to see how many use tickets are available"
     end
 
-    def search_use_tickets
+    def search_use_tickets(languages)
       # scanning use tickets requires the found master tickets csv
       error(5, FOUND_MASTER_CSV) unless File.exists? FOUND_MASTER_CSV
 
       info "Parsing #{FOUND_MASTER_CSV} and checking for use tickets in Scotzilla"
       CSV.foreach(FOUND_MASTER_CSV, :headers => :first_row, :return_headers => false) do |row_data|
+        next unless languages.include?(row_data[11])
         @ticket_finder.find_use({ :product => row_data[10],
                                   :version => @config['product_version'],
                                   :mte => row_data[0].to_i})
@@ -234,10 +207,10 @@ module Scotty
     def write_found_master_tickets(components)
       counter = 0
       CSV.open(FOUND_MASTER_CSV, 'wb') do |csv|
-        csv << ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo','sz_product']
+        csv << ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo','sz_product','language']
         components.each { |c|
             counter +=  1
-            csv << [c.id, c.name, c.version, @config['license_text'], '', @config['license_name'], c.download_url, c.category, 'No', c.subdir, c.sz_product]
+            csv << [c.id, c.name, c.version, @config['license_text'], '', @config['license_name'], c.download_url, c.category, 'No', c.subdir, c.sz_product, c.language]
         }
       end
       info "Wrote #{counter} records to #{FOUND_MASTER_CSV}"
@@ -246,11 +219,11 @@ module Scotty
     def write_missing_master_tickets(components)
       counter = 0
       CSV.open(MISSING_MASTER_CSV, 'wb') do |csv|
-        csv << ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo','sz_product']
+        csv << ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo','sz_product','language']
         components.map do |c|
             counter +=  1
             data = c.result['data']
-            csv << ['', data[0], data[1], @config['license_text'], '', @config['license_name'], c.download_url, data[2], '', c.subdir, c.sz_product]
+            csv << ['', data[0], data[1], @config['license_text'], '', @config['license_name'], c.download_url, data[2], '', c.subdir, c.sz_product, c.language]
         end
       end
       info "Wrote #{counter} records to #{MISSING_MASTER_CSV}"
@@ -285,9 +258,8 @@ module Scotty
       info "Wrote #{counter} records to #{MISSING_USE_CSV}"
     end
 
-    def traverse
-      found_components = false
-      # First let's look for some ruby and node
+    def traverse(languages)
+      # first let's look for some ruby and node
       Find.find("software") do |path|
         file = File.basename(path)
         if FileTest.directory?(path)
@@ -298,32 +270,24 @@ module Scotty
             next
           end
         else
-          if file == 'Gemfile.lock'
-            found_components = true
+          if languages.ruby? && file == 'Gemfile.lock'
             parse_gemfile_lock(File.expand_path(path))
-          elsif file == 'package.json'
-            found_components = true
+
+          elsif languages.node? && file == 'package.json'
             parse_node_packages(File.expand_path(path))
-          elsif File.extname(file) == '.go'
-            found_components = true
+
+          elsif languages.golang? && File.extname(file) == '.go'
             parse_golang_packages(File.expand_path(path))
           end
         end
       end
 
-      #now let's look for some maven
-      top_level_pom = Dir["software" + '/*/pom.xml']
-      unless(top_level_pom.nil?)
-        found_components = true
-        parse_maven_packages(top_level_pom)
-      end
+      # now let's look for some maven
+      parse_maven_packages(Dir['software/*/pom.xml']) if languages.java?
 
-
-      error(1, options.directory) unless found_components
     end
 
-    def push_component(name, version, subdir, download_url)
-      component = Component.new(name, version, subdir, download_url, @config['category'])
+    def push_component(component)
       unless @components.include? component.key
         puts "Found #{component.name} #{component.version} in #{component.subdir}"
         @components[component.key] = component
@@ -352,7 +316,7 @@ module Scotty
 
     def push_node_component(name, version, subdir)
       ver = NodeVer::parse(version) || "INVALID_VERSION"
-      push_component(name, ver, subdir, "http://search.npmjs.org/#/#{name}")
+      push_component(NodeComponent.new(name, ver, subdir, "http://search.npmjs.org/#/#{name}"))
     end
 
     RUBY_NAME_VERSION = /^ {4}(?<name>.*?)\s\((?<version>(\d+\.)?(\d+\.)?(\*|\d+)?)\)/
@@ -363,7 +327,7 @@ module Scotty
       File.open(file_path) do |f|
         f.each do |line|
           if match = RUBY_NAME_VERSION.match(line)
-            push_component(match[:name], match[:version], subdir, "http://rubygems.org/gems/#{match[:name]}")
+            push_component(RubyComponent.new(match[:name], match[:version], subdir, "http://rubygems.org/gems/#{match[:name]}"))
           end
         end
       end
@@ -371,8 +335,8 @@ module Scotty
 
     MAVEN_NAME_VERSION = /^\[INFO\]\s{4}([^:]+)(?::([^:]*))(?::[^:]*)(?::(\d+(?:\.\d+(?:\.\d+(?:\.\d+)?)?)?(?:[^:]*)))/
 
-    def parse_maven_packages(top_level_pom)
-      top_level_pom.each {|top|
+    def parse_maven_packages(top_level_poms)
+      top_level_poms.each do |top|
         info "Running mvn install for " + top
         top_minus = top.chomp("pom.xml")
         system("cd " + top_minus + ";mvn install > /dev/null ;mvn dependency:list | tee delete_me.txt")
@@ -382,17 +346,16 @@ module Scotty
             if MAVEN_NAME_VERSION =~ line
               pkg, name, ver = $1, $2, $3
               ver << ".0.0" if ver.length == 1
-              push_component(name, ver, component_dir_from_path(top_minus), "http://search.maven.org/#search|ga|1|g:#{pkg}")
+              push_component(JavaComponent.new(name, ver, component_dir_from_path(top_minus), "http://search.maven.org/#search|ga|1|g:#{pkg}"))
             end
           end
         end
-      }
+      end
     end
 
     def parse_golang_packages(file_path)
       info "Parsing " + file_path
       subdir = component_dir_from_path(file_path)
-
       parser = GolangParser.new
       import_paths = parser.get_import_paths(file_path)
       GolangStdLib.remove_standard_packages(import_paths).each do |path|
@@ -404,7 +367,8 @@ module Scotty
         #
 
         # TODO: if path does not contain any host prefix, assume this dep is one of ours and ignore
-        push_component(File.basename(path), '?.?.?', subdir, GolangRepositories.map_download_url(path)) if path.include?('/')
+        download_url = GolangRepositories.map_download_url(path) if path.include?('/')
+        push_component(GoComponent.new(File.basename(path), '?.?.?', subdir, download_url))
       end
     end
 
@@ -412,7 +376,81 @@ module Scotty
       path.match(/software\/(?<dir>.*?)\//)['dir']
     end
 
-    #end of class
+  #end of class
+  end
+
+  class LangOptions
+
+    def initialize(opts)
+      return if opts.nil?
+      opts = opts.split(/\s+/) if opts.is_a? String
+
+      opts.each do |o|
+        @java = true if is_java?(o)
+        @node = true if is_node?(o)
+        @ruby = true if is_ruby?(o)
+        @go = true if is_go?(o)
+      end
+    end
+
+    def converse
+      opts = []
+      opts << 'java' unless @java
+      opts << 'node' unless @node
+      opts << 'ruby' unless @ruby
+      opts << 'go' unless @go
+      LangOptions.new(opts)
+    end
+
+    def java?
+      @java
+    end
+
+    def node?
+      @node
+    end
+
+    def ruby?
+      @ruby
+    end
+
+    def golang?
+      @go
+    end
+
+    def any?
+      @java || @node || @ruby || @go
+    end
+
+    def include?(lang)
+      return @java if is_java?(lang)
+      return @node if is_node?(lang)
+      return @ruby if is_ruby?(lang)
+      return @go if is_go?(lang)
+    end
+
+    def inspect
+      "<LangOptions java:#{@java} node:#{@node} ruby:#{@ruby} go:#{@go}>"
+    end
+
+    private
+
+    def is_java?(s)
+      s == 'java'
+    end
+
+    def is_node?(s)
+      s =~ /^node(?:js)?$/  # node | nodejs
+    end
+
+    def is_ruby?(s)
+      s == 'ruby'
+    end
+
+    def is_go?(s)
+      s =~ /^go(?:lang)?$/  # go | golang
+    end
+
   end
 
 end
