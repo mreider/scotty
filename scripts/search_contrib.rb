@@ -1,5 +1,7 @@
 #!/usr/bin/env ruby
 #
+# search_contrib.rb
+#
 
 require 'thor'
 require 'nokogiri'
@@ -7,6 +9,10 @@ require 'nokogiri'
 class SearchContrib < Thor
 
   SEARCH_URL = 'https://scotzilla.eng.vmware.com/buglist.cgi?cf_license=&classification=Open%20Source%20Contribution&columnlist=cf_osc_name%2Ccf_osc_version%2Cresolution%2Cshort_desc%2Creporter&field0-0-0=cf_osc_name&field0-1-0=cf_osc_version&field0-2-0=cf_osc_project&priority=&query_format=advanced&rep_platform=OSC&szsearch=1&type0-0-0=substring&type0-1-0=substring&type0-2-0=substring&value0-0-0=&value0-1-0=&value0-2-0=&query_based_on='.freeze
+
+  def initialize
+    super
+  end
 
   desc "search", "Search Scotzilla for contribution requests"
   method_option :user, :aliases => "-u", :type => :string, :desc => "<user:password>", :required => true
