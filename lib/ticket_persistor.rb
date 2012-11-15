@@ -40,7 +40,8 @@ module Scotty::TicketPersistor
       components.each do |c|
           counter +=  1
           data = c.result['data']
-          csv << ['', data[0], data[1], Scotty.config['license_text'], '', Scotty.config['license_name'], c.download_url, data[2], '', c.subdir, c.sz_product, c.language]
+          csv << ['', data[0], data[1], Scotty.config['license_text'], Scotty.config['description'],
+                  Scotty.config['license_name'], c.download_url, data[2], 'No', c.subdir, c.sz_product, c.language]
       end
     end
     Scotty.info "Wrote #{counter} records to #{Scotty::MISSING_MASTER_CSV}"

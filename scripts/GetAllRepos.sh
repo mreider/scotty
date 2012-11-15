@@ -1,1 +1,0 @@
-curl -s "https://api.github.com/orgs/cloudfoundry/repos?per_page=100" | ruby -rjson -e 'JSON.load(STDIN.read).each {|repo| %x[git clone #{repo["ssh_url"]} ]}'

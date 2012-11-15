@@ -35,11 +35,12 @@ module Scotty
         @server.call_async(method, args)
 
       rescue => e
+        puts e
+        puts e.backtrace
         puts "Error calling #{method} with #{args}"
         if e =~ /SocketError/
           error(2)
         else
-          puts e
           error(0)
         end
       end

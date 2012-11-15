@@ -27,7 +27,7 @@ module Scotty
     end
 
     def key
-      @key = [ sz_name, ':', sz_version ].join unless @key
+      @key = [ sz_name, ':', sz_version, ':', language ].join unless @key
       @key
     end
 
@@ -59,9 +59,6 @@ module Scotty
     GO_LANG = :golang
 
   end # CodeComponent
-
-  module Language
-  end
 
   class JavaComponent < CodeComponent
     def language

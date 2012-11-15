@@ -68,6 +68,25 @@ def github_repos
   JSON.parse(`curl -s "https://api.github.com/orgs/cloudfoundry/repos?per_page=100"`)
 end
 
+def print_usage
+  opts = {
+          :list_local => "Lists local repositories",
+          :list_remote => "Lists repositories on github.com/cloudfoundry",
+          :list_github => "Synonym for list_remote",
+          :list_missing => "Lists remote repositories not cloned locally",
+          :clone => "Clone remote repositories to local machine",
+          :update => "Updates all local repositories to remote head (does not clone anything missing)",
+          :update_all => "Updates all local repositories to remote head and clones any missing repositories",
+          :help => "Prints this message"
+  }
+
+  s = "Usage: #{$0} [option]\r\n"
+  opts.each_pair do |k,v|
+    s << "\t#{k.to_s}\t\t#{v}\r\n"
+  end
+  puts s
+end
+
 #===================================#
 
 Dir.chdir(path_to_software_dir)
@@ -84,7 +103,11 @@ when 'list_missing' then list_missing
 when 'clone' then clone_missing
 when 'update' then update_exisiting
 when 'update_all' then clone_and_update_all
-else puts "invalid option: #{ARGV[0]}"
+when 'help' then print_usage
+else
+  puts "invalid option: #{ARGV[0]}"
+  print_usage
+  exit 1
 end
 
 exit 0

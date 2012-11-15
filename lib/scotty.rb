@@ -221,7 +221,7 @@ module Scotty
 
     def push_component(component)
       unless @components.include? component.key
-        puts "Found #{component.name} #{component.version} in #{component.subdir}"
+        puts "Found #{component.name} #{component.version} in #{component.subdir} (key: #{component.key})"
         @components[component.key] = component
         @ticket_finder.find_master(component)
       end
