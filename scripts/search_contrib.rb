@@ -10,7 +10,7 @@ class SearchContrib < Thor
 
   SEARCH_URL = 'https://scotzilla.eng.vmware.com/buglist.cgi?cf_license=&classification=Open%20Source%20Contribution&columnlist=cf_osc_name%2Ccf_osc_version%2Cresolution%2Cshort_desc%2Creporter&field0-0-0=cf_osc_name&field0-1-0=cf_osc_version&field0-2-0=cf_osc_project&priority=&query_format=advanced&rep_platform=OSC&szsearch=1&type0-0-0=substring&type0-1-0=substring&type0-2-0=substring&value0-0-0=&value0-1-0=&value0-2-0=&query_based_on='.freeze
 
-  def initialize
+  def initialize(*argv)
     super
   end
 
@@ -55,15 +55,17 @@ class SearchContrib < Thor
     # parse buglist
     bugs = []
     buglist = Nokogiri::HTML.parse(out)
-    buglist.xpath("/html/body//table[@class='bz_buglist']/tr[position() > 1]").each do |tr|
-      bug_data = { :id => tr.xpath('td[1]/a')[0].text.strip,
-                   :name => tr.xpath('td[2]')[0].text.strip,
-                   :version => tr.xpath('td[3]')[0].text.strip,
-                   :status => tr.xpath('td[4]/span')[0].text.strip,
-                   :desc => tr.xpath('td[5]')[0].text.strip,
-                   :reporter => tr.xpath('td[6]/span')[0].text.strip }
+    buglist.xpath("/html/body//table[@class='bz_buglist']").each do |table|
+      table.xpath("tr[position() > 1]").each do |tr|
+        bug_data = { :id => tr.xpath('td[1]/a')[0].text.strip,
+                     :name => tr.xpath('td[2]')[0].text.strip,
+                     :version => tr.xpath('td[3]')[0].text.strip,
+                     :status => tr.xpath('td[4]/span')[0].text.strip,
+                     :desc => tr.xpath('td[5]')[0].text.strip,
+                     :reporter => tr.xpath('td[6]/span')[0].text.strip }
 
-      bugs << bug_data
+        bugs << bug_data
+      end
     end
 
     # retval
