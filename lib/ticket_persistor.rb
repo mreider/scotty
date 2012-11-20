@@ -9,6 +9,8 @@ module Scotty
   MISSING_MASTER_CSV = 'missing_master_tickets.csv'
   FOUND_USE_CSV = 'found_use_tickets.csv'
   MISSING_USE_CSV = 'missing_use_tickets.csv'
+  CREATED_MASTER_CSV = 'created_master_tickets.csv'
+  CREATED_USE_CSV = 'created_use_tickets.csv'
 
   def self.info(message)
     puts "[INFO] #{message}"
@@ -20,6 +22,7 @@ module Scotty::TicketPersistor
 
   @@mte_cols = ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo','sz_product','language']
   @@psa_cols = ['mte','product','version','id','interaction','description','is_modified','features','status','resolution']
+  @@created_cols = ['id','desc']
 
   def self.write_found_master_tickets(components)
     counter = 0
@@ -74,6 +77,38 @@ module Scotty::TicketPersistor
       }
     end
     Scotty.info "Wrote #{counter} records to #{Scotty::MISSING_USE_CSV}"
+  end
+
+  def self.write_created_master_tickets(tickets)
+    counter = 0
+    CSV.open(Scotty::CREATED_MASTER_CSV, 'wb') do |csv|
+      csv << @@created_cols
+      tickets.each do |t|
+        counter += 1
+        if t['stat'] == 'ok'
+          csv << [ t['id'], t['desc'] ]
+        else
+          csv << t.to_s
+        end
+      end
+    end
+    Scotty.info "Wrote #{counter} records to #{Scotty::CREATED_MASTER_CSV}"
+  end
+
+  def self.write_created_use_tickets(tickets)
+    counter = 0
+    CSV.open(Scotty::CREATED_USE_CSV, 'wb') do |csv|
+      csv << @@created_cols
+      tickets.each do |t|
+        counter += 1
+        if t['stat'] == 'ok'
+          csv << [ t['id'], t['desc'] ]
+        else
+          csv << t.to_s
+        end
+      end
+    end
+    Scotty.info "Wrote #{counter} records to #{Scotty::CREATED_USE_CSV}"
   end
 
   def self.read_found_master_tickets

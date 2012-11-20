@@ -4,7 +4,6 @@
 # Copyright 2012 © VMware
 # Authors: Matthew Reider (mreider@vmware.com)
 
-require 'xmlrpc/client'
 require 'yaml'
 require 'find'
 require 'csv'
@@ -171,23 +170,31 @@ module Scotty
     end
 
     def create_master_tickets
-      info "Parsing missing_master_tickets.csv and creating new master tickets"
+      info "Parsing #{MISSING_MASTER_CSV} and creating new master tickets"
+      results = []
       TicketPersistor.read_missing_master_tickets do |data|
         data[:username] = @config['user']
         data[:password] = @config['password']
         result = @scotzilla.create_master_ticket(data)
+        results << result
         puts "Created? #{result}"
       end
+      # TODO: write log lines on each create rather than batch
+      TicketPersistor.write_created_master_tickets(results)
     end
 
     def create_use_tickets
-      info "Parsing missing_use_tickets.csv and creating new tickets"
+      info "Parsing #{MISSING_USE_CSV} and creating new tickets"
+      results = []
       TicketPersistor.read_missing_use_tickets do |data|
         data[:username] = @config['user']
         data[:password] = @config['password']
         result = @scotzilla.create_use_ticket(data)
+        results << result
         puts "Created? #{result}"
       end
+      # TODO: write log lines on each create rather than batch
+      TicketPersistor.write_created_use_tickets(results)
     end
 
     def traverse(languages)
@@ -247,7 +254,8 @@ module Scotty
     end
 
     def push_node_component(name, version, subdir)
-      ver = NodeVer::parse(version) || "INVALID_VERSION"
+      ver = NodeVer::parse(version)
+      ver = ver ? pad_version!(ver) : "INVALID_VERSION"
       push_component(NodeComponent.new(name, ver, subdir, "http://search.npmjs.org/#/#{name}"))
     end
 
@@ -259,7 +267,7 @@ module Scotty
       File.open(file_path) do |f|
         f.each do |line|
           if match = RUBY_NAME_VERSION.match(line)
-            push_component(RubyComponent.new(match[:name], match[:version], subdir, "http://rubygems.org/gems/#{match[:name]}"))
+            push_component(RubyComponent.new(match[:name], pad_version!(match[:version]), subdir, "http://rubygems.org/gems/#{match[:name]}"))
           end
         end
       end
@@ -277,7 +285,7 @@ module Scotty
           f.each do |line|
             if MAVEN_NAME_VERSION =~ line
               pkg, name, ver = $1, $2, $3
-              ver << ".0.0" if ver.length == 1
+              pad_version!(ver)
               push_component(JavaComponent.new(name, ver, component_dir_from_path(top_minus), "http://search.maven.org/#search|ga|1|g:#{pkg}"))
             end
           end
@@ -306,6 +314,21 @@ module Scotty
 
     def component_dir_from_path(path)
       path.match(/software\/(?<dir>.*?)\//)['dir']
+    end
+
+    ##
+    # Add additional digits to versions that are less than three digits. Does
+    # not change any version that is three digitis or greater.
+    #
+    # e.g. ''        => '0.0.0'
+    #      '0'       => '0.0.0'
+    #      '0.0'     => '0.0.0'
+    #      '0.0.0'   => '0.0.0'
+    #      '0.0.0.0' => '0.0.0.0'
+    #
+    def pad_version!(ver)
+      ver ||= ''
+      ver << ('.0' * [3 - ver.split('.').size, 0].max)
     end
 
   #end of class
