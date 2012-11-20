@@ -2,7 +2,9 @@
 #
 # search_contrib.rb
 #
+$: << '../lib/'
 
+require 'scotty_config'
 require 'thor'
 require 'nokogiri'
 
@@ -12,10 +14,10 @@ class SearchContrib < Thor
 
   def initialize(*argv)
     super
+    @config = Scotty::Config.new
   end
 
   desc "search", "Search Scotzilla for contribution requests"
-  method_option :user, :aliases => "-u", :type => :string, :desc => "<user:password>", :required => true
   method_option :name, :aliases => "-n", :type => :string, :desc => "Search for a contribution by name"
   method_option :version, :aliases => "-v", :type => :string, :desc => "Search for a contribution by version"
   method_option :reporter, :aliases => "-r", :type => :string,:desc => "Search for a contribution by reporter"
@@ -25,7 +27,7 @@ class SearchContrib < Thor
               :version => options.version,
               :reporter => options.reporter }
 
-    result = SearchContrib.search(query, *options.user.split(':'))
+    result = SearchContrib.search(query, @config.sz_user, @config.sz_pass)
 
     unless result.size == 0
       # header row

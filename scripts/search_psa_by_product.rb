@@ -1,19 +1,24 @@
 #!/usr/bin/env ruby
 #
-# search for use tickets by product
+# search_psa_by_product.rb
+#
+# Search Scotzilla for use tickets (PSA) by product
 #
 
+$: << '../lib/'
+
+require 'scotty_config'
 require 'nokogiri'
 
 SEARCH_URL='https://scotzilla.eng.vmware.com/buglist.cgi?bug_status=ASSIGNED&bug_status=CLOSED&bug_status=ENG%20CONFIRM%20CT&bug_status=NEW&bug_status=PEND%20PATENT%20REVIEW&bug_status=PM%20CONFIRM%20CT&bug_status=REOPENED&bug_status=RESOLVED&bug_status=UNCONFIRMED&bug_status=VERIFIED&classification=Product%20Specific%20Approvals&columnlist=cf_osspkgname%2Ccf_osspkgvers%2Cassigned_to%2Cbug_status%2Cresolution%2Ccf_category%2Cproduct%2Cversion%2Ccf_mte_id&query_format=advanced&rep_platform=PSA&szsearch=1&query_based_on='
 
-def sz_use_tickets_by_products(user_pass, *sz_product)
-  exit 1 unless user_pass && user_pass.is_a?(String) && user_pass.split(':').size == 2
+def sz_use_tickets_by_products(*sz_product)
   exit 1 unless sz_product
 
   url = SEARCH_URL + "&product=#{sz_product.join('&product=')}&version=09%2F01%2F2012" # fixed version
+  c = Scotty::Config.new
 
-  out = `curl -s -u #{user_pass} "#{url}"`
+  out = `curl -s -u #{c.sz_user}:#{c.sz_pass} "#{url}"`
 
   buglist = Nokogiri::HTML.parse(out)
 
@@ -37,8 +42,8 @@ def sz_use_tickets_by_products(user_pass, *sz_product)
   bugs
 end
 
-if ARGV.size < 2
-  puts "Usage: #{$0} user:pass sz_prod [ sz_prod ... ]"
+if ARGV.size == 0
+  puts "Usage: #{$0} sz_prod [ sz_prod ... ]"
   exit 1
 end
 

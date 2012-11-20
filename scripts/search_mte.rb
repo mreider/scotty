@@ -1,8 +1,13 @@
 #!/usr/bin/env ruby
+#
+# search_mte.rb
+#
+# Search Scotzilla for master ticket entries.
+#
 
 $: << '../lib'
 
-require 'scotty'
+require 'scotty_config'
 require 'sz_api'
 
 if ARGV.size != 2
@@ -10,9 +15,7 @@ if ARGV.size != 2
   exit 1
 end
 
-config = ::Scotty.config
-sz = Scotty::SZ_API.new(config['host'], "/" + config['path'], config['port'],
-                        config['use_ssl'], config['user'], config['password'])
+sz = Scotty::SZ_API.from_config(Scotty::Config.new)
 
 name = ARGV[0]
 version = ARGV[1]
