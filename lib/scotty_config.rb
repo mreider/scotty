@@ -50,11 +50,11 @@ module Scotty
       @yaml['description']
     end
 
-    def psa_license_text
+    def license_text
       @yaml['license_text']
     end
 
-    def psa_license_name
+    def license_name
       @yaml['license_name']
     end
 

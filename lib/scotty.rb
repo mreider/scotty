@@ -4,11 +4,9 @@
 # Copyright 2012 © VMware
 # Authors: Matthew Reider (mreider@vmware.com)
 
-require 'yaml'
 require 'find'
 require 'csv'
 require 'json'
-require 'open3'
 require 'thor'
 
 require 'errors'
@@ -23,27 +21,7 @@ require 'code_component'
 
 module Scotty
 
-  # load config
-  #
-  # Initialize opens a yaml file from ~/.scotty and loads it into the :config hash
-  # If no ~/.scotty exists, it will create one. Sorry to clutter up your home directory
-  #
-  stdin, stdout, stderr = Open3.popen3('cat ~/.scotty')
-  yaml = ''
-  stdout.each_line { |line| yaml << line }
-  if stderr.gets =~ /No such file or directory/
-    system("wget -O ~/.scotty http://vmcpush.com/scotty.txt -q")
-    error(3)
-  else
-    @@config = YAML::load(yaml)
-  end
-
-  #
-  # Returns the current configuration object
-  #
-  def self.config
-    @@config
-  end
+  CONF = Config.new
 
   class Scotty < Thor
     include Errors
@@ -52,10 +30,8 @@ module Scotty
 
     def initialize(*args)
       super
-      @components = {}             # TODO: get rid of this
-      @config = ::Scotty.config    # TODO: use module config throughout
-      @scotzilla = SZ_API.new(@config['host'], "/" + @config['path'], @config['port'],
-                              @config['use_ssl'], @config['user'], @config['password'])
+      @components = {}    # TODO: get rid of this
+      @scotzilla = SZ_API.from_config(CONF)
     end
 
     desc "scan","scan for existing tickets in Scotzilla"
@@ -63,8 +39,7 @@ module Scotty
     method_option :exclude_lang, :aliases => "-L", :type => :array, :desc => "Exclude languages from the search"
 
     def scan
-      @ticket_finder = TicketFinder.new(@config['host'], "/" + @config['path'], @config['port'],
-                                        @config['use_ssl'], @config['user'], @config['password'])
+      @ticket_finder = TicketFinder.new
 
       search_langs = LangOptions.new(options.exclude_lang).converse
 
@@ -86,9 +61,7 @@ module Scotty
     method_option :ticket_type, :default => "master", :aliases => "-r", :desc => "sets request type to create (master or use)"
 
     def create
-
       case options.ticket_type
-
         when "master"
           create_master_tickets
         when "use"
@@ -101,9 +74,7 @@ module Scotty
     desc "copyright_years", "prints the copyright years for each repo to STDOUT"
 
     def copyright_years
-
       Dir.chdir('./software')
-
       Dir.entries('.').sort { |f1,f2| f1 <=> f2 }.each do |f|
         next if f[0] == '.'
         next if File.file? f
@@ -157,7 +128,7 @@ module Scotty
       TicketPersistor.read_found_master_tickets do |ticket|
         next unless languages.include?(ticket[:language])
         @ticket_finder.find_use({ :product => ticket[:sz_product],
-                                  :version => @config['product_version'],
+                                  :version => CONF.cf_version,
                                   :mte => ticket[:id] })
       end
       checked = @ticket_finder.use_results.partition{|t| t['stat'] == 'ok'}
@@ -173,8 +144,8 @@ module Scotty
       info "Parsing #{MISSING_MASTER_CSV} and creating new master tickets"
       results = []
       TicketPersistor.read_missing_master_tickets do |data|
-        data[:username] = @config['user']
-        data[:password] = @config['password']
+        data[:username] = CONF.sz_user
+        data[:password] = CONF.sz_password
         result = @scotzilla.create_master_ticket(data)
         results << result
         puts "Created? #{result}"
@@ -187,8 +158,8 @@ module Scotty
       info "Parsing #{MISSING_USE_CSV} and creating new tickets"
       results = []
       TicketPersistor.read_missing_use_tickets do |data|
-        data[:username] = @config['user']
-        data[:password] = @config['password']
+        data[:username] = CONF.sz_user
+        data[:password] = CONF.sz_password
         result = @scotzilla.create_use_ticket(data)
         results << result
         puts "Created? #{result}"
