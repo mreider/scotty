@@ -35,6 +35,7 @@ module Scotty
     #  err => { stat: 'err', code: E123, data: [], mesg: 'failed' }
     #
     def create_master_ticket(args)
+      add_credentials_if_missing(args)
       call("SCOTzilla.create_master", args)
     end
 
@@ -51,6 +52,7 @@ module Scotty
     #  err => { stat: 'err', code: E123, data: [], mesg: 'failed' }
     #
     def create_use_ticket(args)
+      add_credentials_if_missing(args)
       call("SCOTzilla.create_request", args)
     end
 
@@ -148,6 +150,11 @@ module Scotty
     end
 
     private
+
+    def add_credentials_if_missing(args)
+      args[:username] = @server.user unless args[:username]
+      args[:password] = @server.password unless args[:password]
+    end
 
     def call(method, args)
       begin

@@ -144,8 +144,6 @@ module Scotty
       info "Parsing #{MISSING_MASTER_CSV} and creating new master tickets"
       results = []
       TicketPersistor.read_missing_master_tickets do |data|
-        data[:username] = CONF.sz_user
-        data[:password] = CONF.sz_password
         result = @scotzilla.create_master_ticket(data)
         results << result
         puts "Created? #{result}"
@@ -158,8 +156,6 @@ module Scotty
       info "Parsing #{MISSING_USE_CSV} and creating new tickets"
       results = []
       TicketPersistor.read_missing_use_tickets do |data|
-        data[:username] = CONF.sz_user
-        data[:password] = CONF.sz_password
         result = @scotzilla.create_use_ticket(data)
         results << result
         puts "Created? #{result}"
