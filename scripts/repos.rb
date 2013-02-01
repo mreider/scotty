@@ -26,7 +26,7 @@ def list_missing
   locals = Dir['*']
   github_repos.reject { |r| locals.include? r['name'] }
               .map { |r| r['name'] }
-              .sort { |a,b| a <=>b }
+              .sort { |a,b| a <=> b }
               .each { |d| puts d }
 end
 
@@ -48,6 +48,14 @@ def update_existing
   locals = Dir['*'].sort { |a,b| a <=>b }.each do |d|
     puts "~> updating #{d}"
     Dir.chdir(d) { `git pull` }
+  end
+end
+
+def list_revs
+  Dir['*'].sort { |a,b| a <=> b }.map do |d|
+    next if Dir[d + '/.git/refs/heads/*'].empty?
+    r = `cd #{d}; git rev-parse HEAD; cd ..`.chomp
+    puts "#{d},#{r}"
   end
 end
 
@@ -77,6 +85,7 @@ def print_usage
           :clone => "Clone remote repositories to local machine",
           :update => "Updates all local repositories to remote head (does not clone anything missing)",
           :update_all => "Updates all local repositories to remote head and clones any missing repositories",
+          :list_revs => "",
           :help => "Prints this message"
   }
 
@@ -103,6 +112,7 @@ when 'list_missing' then list_missing
 when 'clone' then clone_missing
 when 'update' then update_exisiting
 when 'update_all' then clone_and_update_all
+when 'list_revs' then list_revs
 when 'help' then print_usage
 else
   puts "invalid option: #{ARGV[0]}"
