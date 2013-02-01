@@ -1,0 +1,22 @@
+# scottyignore
+#
+# an idea to implement exclusion of components that we know
+# should not, or need not, be filed in scotzilla
+#
+
+files:
+  -
+    path: vcap-staging/spec/fixtures/apps/node_package_bad/source/package.json
+    reason: intentionally malformed json
+
+components:
+  -
+    name: broken
+    version: 0.0.1
+    path: vcap-staging/spec/fixtures/apps/sinatra_gemfile_with_path_vendored/source/Gemfile.lock
+    reason: this is an imaginary package; doesn't actually exist
+  -
+    name: commons-logging
+    version: 1.1.1
+    path: vcap-java///////
+    reason: multiple master ticket entries exist

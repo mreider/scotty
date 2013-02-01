@@ -19,6 +19,7 @@ require 'golang_repositories'
 require 'node_ver'
 require 'code_component'
 require 'thread'
+require 'scotty_ignore'
 
 module Scotty
 
@@ -166,6 +167,9 @@ module Scotty
     end
 
     def traverse(languages)
+      # excluded items
+      si = ScottyIgnore.new
+
       # first let's look for some ruby and node
       Find.find("software") do |path|
         file = File.basename(path)
@@ -176,6 +180,9 @@ module Scotty
           else
             next
           end
+        elsif reason = si.ignore_manifest?(path)
+          info "ignoring #{path} due to #{reason}"
+          next
         else
           if languages.ruby? && file == 'Gemfile.lock'
             parse_gemfile_lock(File.expand_path(path))
@@ -190,7 +197,10 @@ module Scotty
       end
 
       # now let's look for some maven
-      parse_maven_packages(Dir['software/*/pom.xml']) if languages.java?
+      if languages.java?
+        packages = Dir['software/*/pom.xml'].reject { |s| si.ignore_manifest?(s[9..-1]) }
+        parse_maven_packages(packages)
+      end
 
     end
 
