@@ -3,41 +3,42 @@ Scotty README
 
 Scotty is a script for accessing Scotzilla
 
-Copyright 2012 © VMware
+Copyright 2012 - 2013 © VMware
 
 Author: Matthew Reider at VMware
+        James Apperly at VMware
 
 # Prerequisites
 
 1. Install Ruby using RVM
 
-		curl -L get.rvm.io | bash -s stable
+    curl -L get.rvm.io | bash -s stable
 
 2. Load RVM
 
-		source ~/.rvm/scripts/rvm
-			
+    source ~/.rvm/scripts/rvm
+
 3. Install Ruby 1.9.3
-		
-		rvm install 1.9.3
-		
+
+    rvm install 1.9.3
+
 4. Set this Ruby as your default
 
-		rvm use 1.9.3 --default
-		
+    rvm use 1.9.3 --default
+
 5. Install bundler
 
-		gem install bundler
+    gem install bundler
 
 6. Unzip Scotty somewhere, open a command prompt in that directory
 7. Run bundler
 
-		bundle install
-		
+    bundle install
+
 8. Run Scotty
 
-		ruby scotty.rb [arguments]
-		
+    ruby scotty.rb [arguments]
+
 6. If you don't have a .scotty file in your home directory, Scotty will create one
 
 7. Edit your ~/.scotty file with your VMware username and password
@@ -48,8 +49,8 @@ Author: Matthew Reider at VMware
 
 1. Download / clone all of the Cloud Foundry bits to this directory with
 
-		curl -s "https://api.github.com/orgs/cloudfoundry/repos?per_page=100" | ruby -rjson -e 'JSON.load(STDIN.read).each {|repo| %x[git clone #{repo["ssh_url"]} ]}'
-		
+    curl -s "https://api.github.com/orgs/cloudfoundry/repos?per_page=100" | ruby -rjson -e 'JSON.load(STDIN.read).each {|repo| %x[git clone #{repo["ssh_url"]} ]}'
+
 
 Scotty parses Ruby, Node, and Maven (Java) apps using the following files to get component and version lists:
 
@@ -111,21 +112,21 @@ Double Note: The name of these products in Scotzilla is alwyas preceded by a 'cf
 
 1. Scan the repository
 
-		ruby scotty.rb scan
-		
+    ruby scotty.rb scan
+
 1. After scanning for master tickets generates: `found_master_tickets.csv` and `missing_master_tickets.csv`
 
 1. Review `missing_master_tickets.csv` file and look for malformed rows / records.
 
 1. If `missing_master_tickets.csv` is well formed, go ahead and file tickets using:
 
-		ruby scotty.rb create
+    ruby scotty.rb create
 
 1. Scan your repository again. `missing_master_tickets.csv` should be empty now. If it isn't file an issue here on Github, as there is a bug.
 
 1. Now that you have created all of your master tickets, it's time to scan for Use Tickets.
 
-		ruby scotty.rb -r use
+    ruby scotty.rb -r use
 
 1. After scanning for use tickets the following will be generated: `found_use_tickets.csv` and `missing_use_tickets.csv`
 
@@ -133,8 +134,8 @@ Double Note: The name of these products in Scotzilla is alwyas preceded by a 'cf
 
 1. If `missing_use_tickets.csv` is well formed, go ahead and file use tickets using:
 
-		ruby scotty.rb create -r use
-		
+    ruby scotty.rb create -r use
+
 1. Scan for use tickets again. `missing_use_tickets.csv` should be empty now. If it isn't - file an issue here on Github, as there is a bug.
 
 Thanks for using Scotty!
