@@ -42,6 +42,10 @@ module Scotty
       @yaml['use_ssl']
     end
 
+    def name_version_mapper
+      @yaml['name_ver_mapper']
+    end
+
     def cf_version
       @yaml['product_version']
     end
@@ -75,7 +79,23 @@ module Scotty
     end
 
     def self.create
-      system('wget -O ~/.scotty http://vmcpush.com/scotty.txt -q')
+      return <<-EOF
+        user:
+        password:
+        host: scotzilla.eng.vmware.com
+        path: /xmlrpc.cgi
+        port: 443
+        use_ssl: true
+        name_ver_mapper:
+        license_text: UNKNOWN
+        license_name: UNKNOWN
+        category: VMWsource
+        product_version:
+        description: Automated ticket based on product scanning
+        use_ticket_description: required functionality depends upon on this component
+        interaction: ['Distributed - Calling Existing Classes']
+        features:
+      EOF
     end
 
   end

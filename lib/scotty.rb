@@ -20,10 +20,12 @@ require 'node_ver'
 require 'code_component'
 require 'thread'
 require 'scotty_ignore'
+require 'name_version_mapper'
 
 module Scotty
 
   CONF = Config.new
+  require './' + CONF.name_version_mapper if CONF.name_version_mapper
 
   class Scotty < Thor
     include Errors
@@ -130,7 +132,7 @@ module Scotty
       TicketPersistor.read_found_master_tickets do |ticket|
         next unless languages.include?(ticket[:language])
         @ticket_finder.find_use({ :product => ticket[:sz_product],
-                                  :version => CONF.cf_version,
+                                  :version => ticket[:sz_product_version],
                                   :mte => ticket[:id] })
       end
       checked = @ticket_finder.use_results.partition{|t| t['stat'] == 'ok'} # TODO: smelly ~> scotty shouldn't know about the json schema

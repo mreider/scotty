@@ -20,7 +20,7 @@ end
 
 module Scotty::TicketPersistor
 
-  @@mte_cols = ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo','sz_product','language']
+  @@mte_cols = ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo','sz_product','sz_product_version','language']
   @@psa_cols = ['mte','product','version','id','interaction','description','is_modified','features','status','resolution','license']
   @@created_cols = ['id','desc']
 
@@ -30,7 +30,7 @@ module Scotty::TicketPersistor
       csv << @@mte_cols
       components.each { |c|
           counter +=  1
-          csv << [c.id, c.name, c.version, ::Scotty::CONF.license_text, '', ::Scotty::CONF.license_name, c.download_url, c.category, 'No', c.subdir, c.sz_product, c.language]
+          csv << [c.id, c.name, c.version, ::Scotty::CONF.license_text, '', ::Scotty::CONF.license_name, c.download_url, c.category, 'No', c.subdir, c.sz_product, c.sz_product_version, c.language]
       }
     end
     Scotty.info "Wrote #{counter} records to #{Scotty::FOUND_MASTER_CSV}"
@@ -44,7 +44,7 @@ module Scotty::TicketPersistor
           counter +=  1
           data = c.result['data']
           csv << ['', data[0], data[1], ::Scotty::CONF.license_text, ::Scotty::CONF.mte_desc, ::Scotty::CONF.license_name,
-                  c.download_url, data[2], 'No', c.subdir, c.sz_product, c.language]
+          c.download_url, data[2], 'No', c.subdir, c.sz_product, c.sz_product_version, c.language]
       end
     end
     Scotty.info "Wrote #{counter} records to #{Scotty::MISSING_MASTER_CSV}"
@@ -124,7 +124,8 @@ module Scotty::TicketPersistor
                :is_modified => row_data[8],
                :repo => row_data[9],
                :sz_product => row_data[10],
-               :language => row_data[11] }
+               :sz_product_version => row_data[11],
+               :language => row_data[12] }
       yield data
     end
   end
@@ -141,7 +142,8 @@ module Scotty::TicketPersistor
                :modified => row_data[8],
                :repo => row_data[9],
                :sz_product => row_data[10],
-               :language => [11] }
+               :sz_product_version => row_data[11],
+               :language => row_data[12] }
        yield data
     end
   end

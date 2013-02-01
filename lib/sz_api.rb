@@ -93,7 +93,7 @@ module Scotty
     ##
     # Returns a list of CF products that are registered with Scotzilla
     #
-    def self.get_product_list(strip_prefix=false)
+    def self.get_product_list
       c = Scotty::Config.new
       yield 'Downloading product list from Scotzilla...' if block_given?
       html = `curl -s -u #{c.sz_user}:#{c.sz_pass} "https://scotzilla.eng.vmware.com/szsearch.cgi?type=tst"`
@@ -101,8 +101,6 @@ module Scotty
       doc = Nokogiri::HTML.parse(html)
       doc.xpath("html/body/div[@id='bugzilla-body']/form//select[@id='vmprod']/option")
         .map { |o| o.text.strip }
-        .select { |s| s.start_with? 'cf-' }
-        .map { |s| strip_prefix ? s[3..-1] : s }
         .sort { |a,b| a <=> b }
     end
 
@@ -140,7 +138,7 @@ module Scotty
     end
 
     ##
-    # Returns a list of all use tickets for a given CF version
+    # Returns a list of all use tickets for a given version
     #
     def self.find_all_use_tickets(version)
       find_all_use_tickets_by_product(version, get_product_list)

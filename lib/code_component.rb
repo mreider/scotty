@@ -15,6 +15,7 @@ module Scotty
       @version = version
       @subdir = subdir
       @download_url = download_url
+      @product,@product_version = Mapper::map_repo_to_sz_name_ver(subdir)
       @key = nil
     end
 
@@ -46,7 +47,11 @@ module Scotty
     end
 
     def sz_product
-      "cf-#{self.subdir}"
+      @product
+    end
+
+    def sz_product_version
+      @product_version
     end
 
     def language
