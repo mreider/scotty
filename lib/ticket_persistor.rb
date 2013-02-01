@@ -30,7 +30,7 @@ module Scotty::TicketPersistor
       csv << @@mte_cols
       components.each { |c|
           counter +=  1
-          csv << [c.id, c.name, c.version, Scotty::CONF.license_text, '', Scotty.CONF.license_name, c.download_url, c.category, 'No', c.subdir, c.sz_product, c.language]
+          csv << [c.id, c.name, c.version, ::Scotty::CONF.license_text, '', ::Scotty::CONF.license_name, c.download_url, c.category, 'No', c.subdir, c.sz_product, c.language]
       }
     end
     Scotty.info "Wrote #{counter} records to #{Scotty::FOUND_MASTER_CSV}"
@@ -43,7 +43,7 @@ module Scotty::TicketPersistor
       components.each do |c|
           counter +=  1
           data = c.result['data']
-          csv << ['', data[0], data[1], Scotty::CONF.license_text, Scotty::CONF.mte_des, Scotty::CONF.license_name,
+          csv << ['', data[0], data[1], ::Scotty::CONF.license_text, ::Scotty::CONF.mte_desc, ::Scotty::CONF.license_name,
                   c.download_url, data[2], 'No', c.subdir, c.sz_product, c.language]
       end
     end
@@ -58,7 +58,7 @@ module Scotty::TicketPersistor
         elem['requests'].each do |item|
           counter += 1
           csv << [ elem['mte'], elem['product'], elem['version'], item['id'],
-                   item['interactions'].join, Scotty::CONF.psa_desc,  # TODO: desc should come from ticket, no?
+                   item['interactions'].join, ::Scotty::CONF.psa_desc,  # TODO: desc should come from ticket, no?
                    item['modified'], item['features'].join, item['status'],
                    item['resolution'] ]
         end
@@ -151,8 +151,8 @@ module Scotty::TicketPersistor
       data = { :product => row_data[1],
                :version => row_data[2],
                :mte => row_data[0].to_i,
-               :interaction => Scotty::CONF.psa_interaction,
-               :description => Scotty::CONF.psa_desc }
+               :interaction => ::Scotty::CONF.psa_interaction,
+               :description => ::Scotty::CONF.psa_desc }
       yield data
     end
   end

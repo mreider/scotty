@@ -18,6 +18,7 @@ require 'golang_std_lib'
 require 'golang_repositories'
 require 'node_ver'
 require 'code_component'
+require 'thread'
 
 module Scotty
 
