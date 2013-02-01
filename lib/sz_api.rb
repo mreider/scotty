@@ -14,7 +14,7 @@ module Scotty
   class SZ_API
     include Errors
 
-    PSA_BY_PROD_URL='https://scotzilla.eng.vmware.com/buglist.cgi?bug_status=ASSIGNED&bug_status=CLOSED&bug_status=ENG%20CONFIRM%20CT&bug_status=NEW&bug_status=PEND%20PATENT%20REVIEW&bug_status=PM%20CONFIRM%20CT&bug_status=REOPENED&bug_status=RESOLVED&bug_status=UNCONFIRMED&bug_status=VERIFIED&classification=Product%20Specific%20Approvals&columnlist=cf_osspkgname%2Ccf_osspkgvers%2Cassigned_to%2Cbug_status%2Cresolution%2Ccf_category%2Cproduct%2Cversion%2Ccf_mte_id&query_format=advanced&rep_platform=PSA&szsearch=1&query_based_on='
+    PSA_BY_PROD_URL='https://scotzilla.eng.vmware.com/buglist.cgi?bug_status=ASSIGNED&bug_status=CLOSED&bug_status=ENG%20CONFIRM%20CT&bug_status=NEW&bug_status=PEND%20PATENT%20REVIEW&bug_status=PM%20CONFIRM%20CT&bug_status=REOPENED&bug_status=RESOLVED&bug_status=UNCONFIRMED&bug_status=VERIFIED&classification=Product%20Specific%20Approvals&columnlist=cf_osspkgname%2Ccf_osspkgvers%2Cassigned_to%2Cbug_status%2Cresolution%2Ccf_category%2Cproduct%2Cversion%2Ccf_mte_id%2Ccf_license&query_format=advanced&rep_platform=PSA&szsearch=1&query_based_on='
 
     def initialize(host, path, port, use_ssl, user, password)
       @server = XMLRPC::Client.new(host, path, port, nil, nil, user, password, use_ssl, nil)
@@ -122,16 +122,21 @@ module Scotty
             :version => tr.xpath('td[3]')[0].text.strip,
             :assignee => tr.xpath('td[4]/span')[0].text.strip,
             :status => tr.xpath('td[5]/span/@title')[0].text.strip,
-            :resolution => tr.xpath('td[6]/span')[0].text.strip,
+            :resolution => tr.xpath('td[6]/span/@title')[0].text.strip,
             :category => tr.xpath('td[7]')[0].text.strip,
-            :cf_product => tr.xpath('td[8]/span')[0].text.strip,
-            :cf_version => tr.xpath('td[9]/span')[0].text.strip,
-            :mte => tr.xpath('td[10]')[0].text.strip
+            :cf_product => tr.xpath('td[8]/span/@title')[0].text.strip,
+            :cf_version => tr.xpath('td[9]/span/@title')[0].text.strip,
+            :mte => tr.xpath('td[10]')[0].text.strip,
+            :license => tr.xpath('td[11]')[0].text.strip
           }
         end
       end
 
       bugs
+    end
+
+    def self.use_ticket_query_columns
+      [:id,:name,:version,:assignee,:status,:resolution,:category,:cf_product,:cf_version,:mte,:license].dup
     end
 
     ##
