@@ -114,7 +114,7 @@ module Scotty
       error(5, 'software') unless File::directory?('software')
 
       traverse(languages)
-      checked = @ticket_finder.master_results.partition {|c| c.result['stat'] == 'ok'}
+      checked = @ticket_finder.master_results.partition {|c| c.result['stat'] == 'ok'}  # TODO: smelly ~> scotty shouldn't know about the json schema
       TicketPersistor.write_found_master_tickets(checked[0])
       TicketPersistor.write_missing_master_tickets(checked[1])
       info "Check the spreadsheet, modify it, and run 'scotty scan -r use' to see how many use tickets are available"
@@ -131,7 +131,7 @@ module Scotty
                                   :version => CONF.cf_version,
                                   :mte => ticket[:id] })
       end
-      checked = @ticket_finder.use_results.partition{|t| t['stat'] == 'ok'}
+      checked = @ticket_finder.use_results.partition{|t| t['stat'] == 'ok'} # TODO: smelly ~> scotty shouldn't know about the json schema
       TicketPersistor.write_found_use_tickets(checked[0])
       TicketPersistor.write_missing_use_tickets(checked[1])
     end
@@ -208,6 +208,7 @@ module Scotty
       begin
         result = JSON.parse(json)
       rescue
+        # TODO: don't just swallow this
         return
       end
 
