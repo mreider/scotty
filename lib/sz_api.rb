@@ -125,7 +125,7 @@ module Scotty
             :resolution => tr.xpath('td[6]/span')[0].text.strip,
             :category => tr.xpath('td[7]')[0].text.strip,
             :cf_product => tr.xpath('td[8]/span')[0].text.strip,
-            :cf_version => tr.xpath('td[9]/span').text.strip,
+            :cf_version => tr.xpath('td[9]/span')[0].text.strip,
             :mte => tr.xpath('td[10]')[0].text.strip
           }
         end
