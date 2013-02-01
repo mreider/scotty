@@ -21,7 +21,7 @@ end
 module Scotty::TicketPersistor
 
   @@mte_cols = ['id','name','version','license_text','description','license_name','source_url','category','is_modified','repo','sz_product','language']
-  @@psa_cols = ['mte','product','version','id','interaction','description','is_modified','features','status','resolution']
+  @@psa_cols = ['mte','product','version','id','interaction','description','is_modified','features','status','resolution','license']
   @@created_cols = ['id','desc']
 
   def self.write_found_master_tickets(components)
@@ -58,9 +58,9 @@ module Scotty::TicketPersistor
         elem['requests'].each do |item|
           counter += 1
           csv << [ elem['mte'], elem['product'], elem['version'], item['id'],
-                   item['interactions'].join, ::Scotty::CONF.psa_desc,  # TODO: desc should come from ticket, no?
+                   item['interactions'].join, item['desc'],
                    item['modified'], item['features'].join, item['status'],
-                   item['resolution'] ]
+                   item['resolution'], item['license_name'] ]
         end
       end
     end
