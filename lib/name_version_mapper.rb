@@ -14,7 +14,7 @@ module Scotty
       # custom mapping schemes
       #
       def map_repo_to_sz_name_ver(repo_name)
-        return default_sx_ver(repo_name)
+        return default_sz_ver(repo_name)
       end
 
     end
