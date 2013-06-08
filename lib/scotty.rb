@@ -35,7 +35,12 @@ module Scotty
     def initialize(*args)
       super
       @components = {}    # TODO: get rid of this
+      @exclude_packages = []
       @scotzilla = SZ_API.from_config(CONF)
+      if CONF.exclude_packages_file
+        File.open(CONF.exclude_packages_file, 'r') { |f| @exclude_packages_file = YAML::load(f.read) }
+        @exclude_packages = @exclude_packages_file["exclude-packages"]
+      end
     end
 
     desc "scan","scan for existing tickets in Scotzilla"
@@ -207,10 +212,16 @@ module Scotty
     end
 
     def push_component(component)
-      unless @components.include? component.key
-        puts "Found #{component.name} #{component.version} in #{component.subdir} (key: #{component.key})"
-        @components[component.key] = component
-        @ticket_finder.find_master(component)
+      if @components.include? component.key
+        puts "Found #{component.name} #{component.version} in #{component.subdir} (key: #{component.key}) (previously captured)"
+      else
+        if @exclude_packages.include? component.name
+          puts "Ignoring #{component.name} #{component.version} in #{component.subdir} (key: #{component.key}) (excluded)"
+        else
+          puts "Adding #{component.name} #{component.version} in #{component.subdir} (key: #{component.key})"
+          @components[component.key] = component
+          @ticket_finder.find_master(component)
+        end
       end
     end
 
