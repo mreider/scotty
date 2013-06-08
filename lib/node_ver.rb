@@ -8,7 +8,7 @@
 module Scotty; end
 module Scotty::NodeVer
 
-  NODE_VER = /(~>?)?((?:<|>)=?)?\s*[v=]*(\d+|x|X|\*)(?:\.(\d+|x|X|\*)(?:\.(\d+|x|X|\*)(?:\.(\d+|x|X|\*))?)?)?([a-zA-Z-][a-zA-Z0-9-\.:]*)?/
+  NODE_VER = /(~>?)?((?:<|>)=?)?\s*[v=]*(\d+|x|X|\*)(?:\.(\d+|x|X|\*)(?:\.(\d+|x|X|\*)(?:\.(\d+|x|X|\*))?)?)?([a-zA-Z-][a-zA-Z0-9\-\.:]*)?/
   #            ^spermy  ^gtlt       ^v   ^major           ^minor           ^patch           ^build            ^tag
 
   def self.parse(exp)
