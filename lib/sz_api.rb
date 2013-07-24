@@ -160,23 +160,34 @@ module Scotty
     end
 
     def call(method, args)
-      begin
-        @counter += 1
-        @server.call_async(method, args)
 
-      rescue => e
-        puts e
-        puts e.backtrace
-        puts "Error calling #{method} with #{args} on req #{@counter}"
-        if e =~ /SocketError/
-          error(2)
-        else
-          error(0)
+      retries = 1
+      finished = false
+
+      while (retries < 5 and !finished)
+        begin
+          finished = true
+          retries = retries + 1
+          @counter += 1
+          result = @server.call_async(method, args)
+
+        rescue Timeout::Error => e
+          finished = false
+          puts "Timeout - Retrying"
+        rescue => e
+          puts e
+          puts e.backtrace
+          puts "Error calling #{method} with #{args} on req #{@counter}"
+          if e =~ /SocketError/
+            error(2)
+          else
+            error(0)
+          end
+
         end
 
-        # Connection reset by peer
       end
-
+      result
     end
   end
 end

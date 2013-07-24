@@ -78,6 +78,10 @@ module Scotty
       @yaml['features']
     end
 
+    def exclude_packages_file
+      @yaml['exclude_packages_file']
+    end
+
     def self.create
       return <<-EOF
         user:
@@ -95,6 +99,7 @@ module Scotty
         use_ticket_description: required functionality depends upon on this component
         interaction: ['Distributed - Calling Existing Classes']
         features:
+        exclude_packages_file:
       EOF
     end
 
