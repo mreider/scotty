@@ -203,22 +203,24 @@ module Scotty
         end
       end
 
-      # now let's look for some maven
+      # now let's look for some java
       if languages.java?
         packages = Dir['software/*/pom.xml'].reject { |s| si.ignore_manifest?(s[9..-1]) }
         parse_maven_packages(packages)
+        packages = Dir['software/*/build.gradle'].reject { |s| si.ignore_manifest?(s[9..-1]) }
+        parse_gradle_packages(packages)
       end
 
     end
 
     def push_component(component)
       if @components.include? component.key
-        puts "Found #{component.name} #{component.version} in #{component.subdir} (key: #{component.key}) (previously captured)"
+        info "Found #{component.name} #{component.version} in #{component.subdir} (key: #{component.key}) (previously captured)"
       else
         if @exclude_packages.include? component.name
-          puts "Ignoring #{component.name} #{component.version} in #{component.subdir} (key: #{component.key}) (excluded)"
+          info "Ignoring #{component.name} #{component.version} in #{component.subdir} (key: #{component.key}) (excluded)"
         else
-          puts "Adding #{component.name} #{component.version} in #{component.subdir} (key: #{component.key})"
+          info "Adding #{component.name} #{component.version} in #{component.subdir} (key: #{component.key})"
           @components[component.key] = component
           @ticket_finder.find_master(component)
         end
@@ -280,6 +282,25 @@ module Scotty
               pad_version!(ver)
               push_component(JavaComponent.new(name, ver, component_dir_from_path(top_minus), "http://search.maven.org/#search|ga|1|g:#{pkg}"))
             end
+          end
+        end
+      end
+    end
+
+    GRADLE_NAME_VERSION = /[\+\\]\-\-\-\s(?<g>[^\s]*)(\s\(\*\))?+$/
+    GRADLE_PROJECTS = /'(?<g>:[^']*)'$/
+
+    def parse_gradle_packages(top_level_builds)
+      top_level_builds.each do |top|
+        info "Running gradle dependencies for " + top
+        top_minus = top.chomp("build.gradle")
+        # list projects
+        `cd #{top_minus}; gradle projects`.scan(GRADLE_PROJECTS) do |project|
+          info "Scanning project #{project[0]}..."
+          `cd #{top_minus}; gradle #{project[0]}:dependencies`.scan(GRADLE_NAME_VERSION) do |match|
+            pkg, name, ver = $1.split(':')
+            pad_version!(ver)
+            push_component(JavaComponent.new(name, ver, component_dir_from_path(top_minus), "http://search.maven.org/#search|ga|1|g:#{pkg}"))
           end
         end
       end
